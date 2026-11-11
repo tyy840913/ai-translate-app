@@ -105,7 +105,6 @@ class MainActivity : AppCompatActivity() {
                 restoring = true
                 inputText.setText("")
                 restoring = false
-                btnClear.visibility = View.GONE
                 targetLang =
                     if (restoredTarget == Languages.SMART) Languages.SMART else restoredTarget
                 updateTargetViews()
@@ -126,7 +125,6 @@ class MainActivity : AppCompatActivity() {
             inputText.setText(input)
             inputText.setSelection(inputText.text.length)
             restoring = false
-            btnClear.visibility = if (input.isEmpty()) View.GONE else View.VISIBLE
 
             // 如果历史译文正好符合智能模式的默认目标，保持「智能」不变。
             targetLang =
@@ -191,6 +189,9 @@ class MainActivity : AppCompatActivity() {
                 imm.showSoftInput(inputText, InputMethodManager.SHOW_IMPLICIT)
             }, 100)
         }
+        inputText.setOnClickListener {
+            scrollInputToCursor()
+        }
 
         // 键盘弹出/收起时窗口高度变化，重新把译文区滚回 50% 位置。
         // 用 OnGlobalLayoutListener 监听整个窗口高度变化（比 OnLayoutChangeListener 更可靠）。
@@ -219,7 +220,6 @@ class MainActivity : AppCompatActivity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
             override fun afterTextChanged(s: Editable?) {
                 val text = s?.toString().orEmpty()
-                btnClear.visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
                 if (restoring) return
                 if (photoUri != null) {
                     if (text.isBlank()) return
@@ -493,7 +493,6 @@ class MainActivity : AppCompatActivity() {
         photoBase64 = null
         photoContainer.visibility = View.VISIBLE
         inputText.visibility = View.GONE
-        btnClear.visibility = View.GONE
         photoPreview.setImageDrawable(null)
         restoring = true
         inputText.setText("")
@@ -659,6 +658,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun scrollInputToCursor() {
+        val selection = inputText.selectionStart.coerceAtLeast(inputText.selectionEnd)
+        val layout = inputText.layout ?: return
+        val line = layout.getLineForOffset(selection)
+        val lineTop = layout.getLineTop(line)
+        val lineBottom = layout.getLineBottom(line)
+        val cursorTopInInputArea = lineTop + inputText.paddingTop
+        val inputAreaTopInScroll = inputArea.top
+        val cursorYInScroll = inputAreaTopInScroll + cursorTopInInputArea
+        val viewportHeight = contentScroll.height
+        val keyboardVisible = viewportHeight < (resources.displayMetrics.heightPixels * 0.6)
+        if (keyboardVisible) {
+            val targetY = (cursorYInScroll - viewportHeight / 3).coerceAtLeast(0)
+            contentScroll.smoothScrollTo(0, targetY)
+        }
+    }
+
     private fun copyTranslation() {
         if (!hasTranslation) {
             toast(getString(R.string.no_translation_yet))
@@ -692,7 +708,6 @@ class MainActivity : AppCompatActivity() {
         inputText.setText("")
         restoring = false
         clearPhotoState()
-        btnClear.visibility = View.GONE
         requestSeq++
         handler.removeCallbacks(translateRunnable)
         showIdle()
@@ -718,9 +733,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.10"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.11"
         } catch (_: Exception) {
-            "1.3.10"
+            "1.3.11"
         }
     }
 

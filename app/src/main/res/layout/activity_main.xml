@@ -174,8 +174,7 @@
                                 android:contentDescription="@string/clear_input"
                                 android:padding="8dp"
                                 android:src="@drawable/ic_close"
-                                android:tint="@color/text_secondary"
-                                android:visibility="gone" />
+                                android:tint="@color/text_secondary" />
 
                             <FrameLayout
                                 android:id="@+id/photo_container"
@@ -217,8 +216,8 @@
                         <LinearLayout
                             android:id="@+id/output_area"
                             android:layout_width="match_parent"
-                            android:layout_height="0dp"
-                            android:layout_weight="60"
+                            android:layout_height="wrap_content"
+                            android:minHeight="200dp"
                             android:orientation="vertical"
                             android:visibility="gone">
 
