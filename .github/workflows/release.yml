@@ -43,31 +43,26 @@ jobs:
       - name: 编译 APK
         run: gradle assembleRelease --no-daemon --stacktrace
 
-      - name: 创建 Release 并上传 APK
+      - name: 创建 Release 并上传 APK（gh CLI）
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          API="https://api.github.com/repos/${{ github.repository }}"
           TAG="${{ inputs.tag_name }}"
-          if [ -z "$TAG" ]; then
-            echo "No tag_name provided"
-            exit 1
-          fi
+          if [ -z "$TAG" ]; then echo "No tag_name"; exit 1; fi
           APK="app/build/outputs/apk/release/app-release.apk"
-          FILENAME="AI-Translate-${TAG}.apk"
 
-          echo "=== Creating release for $TAG ==="
-          REL_ID=$(curl -s -H "Authorization: token $GH_TOKEN" -X POST \
-            -H "Content-Type: application/json" \
-            -d "{\"tag_name\":\"$TAG\",\"name\":\"AI Translate $TAG\",\"body\":\"自动构建\"}" \
-            "$API/releases" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('id', d.get('message','ERROR')))")
-          echo "release_id=$REL_ID"
+          # 删除可能存在的旧 release（忽略 404）
+          gh release delete "$TAG" --repo "${{ github.repository }}" --yes 2>/dev/null || true
 
-          echo "=== Uploading asset $FILENAME ==="
-          UPLOAD_RESP=$(curl -s -H "Authorization: token $GH_TOKEN" -X POST \
-            -H "Content-Type: application/octet-stream" \
-            --data-binary @"$APK" \
-            "$API/releases/$REL_ID/assets?name=$FILENAME")
-          echo "$UPLOAD_RESP"
-          echo "$UPLOAD_RESP" | python3 -c "import json,sys; d=json.load(sys.stdin); print('asset:', d.get('name'), d.get('state'), d.get('size'))"
+          # 创建 release（不指定 target，默认指向 tag 指向的 commit）
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --title "AI Translate $TAG" \
+            --notes "自动构建"
+
+          # 上传 asset
+          gh release upload "$TAG" "$APK" --repo "${{ github.repository }}"
+
+          # 验证
+          gh release view "$TAG" --repo "${{ github.repository }}"
