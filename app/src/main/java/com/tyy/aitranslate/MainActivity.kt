@@ -12,6 +12,7 @@ import android.os.Looper
 import android.provider.MediaStore
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
@@ -169,8 +170,19 @@ class MainActivity : AppCompatActivity() {
         updateTargetViews()
         showIdle()
 
-        // 无译文时，整个 input_area 都是输入区，点击任何位置都能弹键盘。
-        // 有译文后，input_area 只显示在分隔线上方，点击行为由 input_text 自己处理。
+        // 无译文时，整个卡片区域（包括 NestedScrollView 的空白部分）都能弹键盘。
+        // 有译文后，只保留 input_text 自己的点击行为。
+        contentScroll.setOnTouchListener { _, event ->
+            if (event.action == MotionEvent.ACTION_UP && !hasTranslation) {
+                inputText.requestFocus()
+                inputText.postDelayed({
+                    val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                    imm.showSoftInput(inputText, InputMethodManager.SHOW_IMPLICIT)
+                }, 50)
+                return@setOnTouchListener true
+            }
+            false
+        }
         inputArea.setOnClickListener {
             inputText.requestFocus()
             inputText.postDelayed({
@@ -679,9 +691,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.3"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.4"
         } catch (_: Exception) {
-            "1.3.3"
+            "1.3.4"
         }
     }
 
