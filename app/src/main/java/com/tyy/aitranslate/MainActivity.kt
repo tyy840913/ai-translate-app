@@ -197,7 +197,8 @@ class MainActivity : AppCompatActivity() {
         var lastWindowHeight = 0
         rootLayout.viewTreeObserver.addOnGlobalLayoutListener {
             val newHeight = rootLayout.height
-            if (lastWindowHeight != 0 && hasTranslation && newHeight != lastWindowHeight) {
+            // 有译文 OR 正在翻译中（loading）时都需要重新滚动到 50% 位置
+            if (lastWindowHeight != 0 && (hasTranslation || progress.visibility == View.VISIBLE) && newHeight != lastWindowHeight) {
                 lastWindowHeight = newHeight
                 contentScroll.post {
                     val halfHeight = contentScroll.height / 2
@@ -709,9 +710,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.7"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.8"
         } catch (_: Exception) {
-            "1.3.7"
+            "1.3.8"
         }
     }
 
