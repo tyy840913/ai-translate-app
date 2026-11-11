@@ -48,7 +48,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnTranslate: View
 
     private val handler = Handler(Looper.getMainLooper())
-    private val executor = Executors.newSingleThreadExecutor()
+    private val executor = Executors.newCachedThreadPool()
     private val translateRunnable = Runnable { translateNow(false) }
 
     private var sourceLang = Languages.AUTO
