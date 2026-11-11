@@ -72,6 +72,8 @@ object TranslateClient {
                 put("model", profile.model.trim())
                 put("stream", false)
                 put("reasoning_effort", "none")
+                // GLM / Qwen3 系列认 chat_template_kwargs.enable_thinking；OpenAI 系列忽略该字段，无副作用
+                put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
                 put("messages", messages)
             }
 

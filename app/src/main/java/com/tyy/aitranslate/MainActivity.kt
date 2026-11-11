@@ -12,6 +12,8 @@ import android.os.Looper
 import android.provider.MediaStore
 import android.text.Editable
 import android.text.TextWatcher
+import android.graphics.Rect
+import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
@@ -169,13 +171,44 @@ class MainActivity : AppCompatActivity() {
         updateTargetViews()
         showIdle()
 
-        // 点击 input_area 空白区域也能弹出键盘（EditText 只响应文字区，空白区由 FrameLayout 捕获）
+        // 点击 input_area 空白区域也能弹出键盘。
+        // 根因：EditText 只在触摸点落在"文字区"时主动弹键盘；点在后几行空白处它
+        // 消费了触摸但不弹。FrameLayout 的 setOnClickListener 兜底不到（子 View 已消费）。
+        // 修法：在 input_area 上加 OnTouchListener 拦截 ACTION_UP，触摸点落在 EditText
+        // 空白区时主动 requestFocus + showSoftInput。
         inputArea.setOnClickListener {
             inputText.requestFocus()
             inputText.postDelayed({
                 val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
                 imm.showSoftInput(inputText, InputMethodManager.SHOW_IMPLICIT)
             }, 100)
+        }
+        inputArea.setOnTouchListener { _, event ->
+            if (event.action == MotionEvent.ACTION_UP) {
+                // 只有当触摸点落在 input_text 的边界内（包括文字区和空白区）才处理，
+                // 避免误伤 btn_clear / photo_container 等其他子 View 的点击。
+                val rect = Rect()
+                inputText.getGlobalVisibleRect(rect)
+                val globalX = event.rawX.toInt()
+                val globalY = event.rawY.toInt()
+                if (globalX in rect.left..rect.right && globalY in rect.top..rect.bottom) {
+                    // 判断触摸点是否落在 hint 文字区（EditText 自己会弹键盘的区域）。
+                    // 粗略判断：用 inputText 的 lineCount × lineHeight 估算文字区高度，
+                    // 超出该高度即为"空白区"，需要主动弹键盘。
+                    val lineCount = inputText.lineCount.coerceAtLeast(1)
+                    val textHeight = lineCount * inputText.lineHeight
+                    val textTop = rect.top + inputText.paddingTop
+                    if (globalY > textTop + textHeight) {
+                        inputText.requestFocus()
+                        inputText.postDelayed({
+                            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                            imm.showSoftInput(inputText, InputMethodManager.SHOW_IMPLICIT)
+                        }, 50)
+                        return true
+                    }
+                }
+            }
+            false
         }
 
         inputText.addTextChangedListener(object : TextWatcher {
@@ -673,9 +706,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.1"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.2"
         } catch (_: Exception) {
-            "1.3.1"
+            "1.3.2"
         }
     }
 
