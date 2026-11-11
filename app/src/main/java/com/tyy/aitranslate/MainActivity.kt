@@ -75,6 +75,7 @@ class MainActivity : AppCompatActivity() {
     private var photoUri: Uri? = null
     private var photoBase64: String? = null
     private var keyboardHeight = 0
+    private var lastKeyboardHeightForRescroll = 0
 
     private val cameraLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -193,16 +194,24 @@ class MainActivity : AppCompatActivity() {
             scrollInputToCursor()
         }
 
-        // 监听窗口高度变化，记录键盘高度（供 scrollInputToCursor 编辑定位用）。
-        // 键盘弹出/收起时 adjustResize 自动收缩/恢复 viewport，两区域随之缩放，
-        // 不强制改高度或滚动，保留用户当前阅读位置。
+        // 监听窗口高度变化，记录键盘高度。
+        // 键盘收起（>0→0）且有译文时，重滚到 2/3 处，让译文区重新可见
+        // （键盘弹出时 viewport 收缩，译文被滚到接近底部，收起后 viewport 恢复，
+        // 原滚动位置相对新 viewport 偏上，译文被顶到看不见）。
         contentScroll.viewTreeObserver.addOnGlobalLayoutListener {
             val rect = android.graphics.Rect()
             contentScroll.getWindowVisibleDisplayFrame(rect)
             val visibleHeight = rect.bottom - rect.top
             if (visibleHeight <= 0) return@addOnGlobalLayoutListener
             val windowHeight = contentScroll.rootView?.height ?: 0
-            keyboardHeight = (windowHeight - visibleHeight).coerceAtLeast(0)
+            val newKeyboardHeight = (windowHeight - visibleHeight).coerceAtLeast(0)
+
+            // 键盘收起且当前有译文 → 等 viewport 恢复后重滚
+            if (lastKeyboardHeightForRescroll > 0 && newKeyboardHeight == 0 && hasTranslation) {
+                contentScroll.postDelayed({ scrollToResult() }, 150)
+            }
+            lastKeyboardHeightForRescroll = newKeyboardHeight
+            keyboardHeight = newKeyboardHeight
         }
 
         inputText.addTextChangedListener(object : TextWatcher {
@@ -720,9 +729,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.19"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.20"
         } catch (_: Exception) {
-            "1.3.19"
+            "1.3.20"
         }
     }
 
