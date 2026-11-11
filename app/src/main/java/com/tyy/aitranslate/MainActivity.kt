@@ -191,6 +191,15 @@ class MainActivity : AppCompatActivity() {
             }, 100)
         }
 
+        // 键盘弹出/收起时卡片高度变化，重新把译文区滚回 50% 位置。
+        var lastScrollHeight = contentScroll.height
+        contentScroll.addOnLayoutChangeListener { _, _, _, _, _, oldHeight, _ ->
+            if (oldHeight != 0 && hasTranslation && oldHeight != lastScrollHeight) {
+                lastScrollHeight = contentScroll.height
+                scrollToResult()
+            }
+        }
+
         inputText.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
@@ -692,9 +701,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.5"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.6"
         } catch (_: Exception) {
-            "1.3.5"
+            "1.3.6"
         }
     }
 
