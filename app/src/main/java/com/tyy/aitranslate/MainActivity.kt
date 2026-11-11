@@ -552,6 +552,7 @@ class MainActivity : AppCompatActivity() {
         outputText.setTextColor(ContextCompat.getColor(this, R.color.text_hint))
         hasTranslation = false
         setActionsEnabled(false)
+        scrollToResult()
     }
 
     private fun showResult(text: String, target: String) {
@@ -622,12 +623,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun scrollToResult() {
         contentScroll.post {
-            // 译文出现后，自动向上滚动，保留最后 2-3 行输入文字在屏幕中上部，便于阅读。
-            // 分隔线上方保留 3 行（约 3 × lineHeight ≈ 3 × 25dp ≈ 75dp），
-            // 让输入区末尾可见，同时让译文区从屏幕中上部开始显示。
-            val keepLines = 3
-            val keepHeight = keepLines * inputText.lineHeight
-            val targetY = (divider.top - keepHeight).coerceAtLeast(0)
+            // 译文区从卡片高度的 50% 位置开始显示：上半部分留给输入，下半部分留给译文。
+            // 计算：divider 的绝对位置（相对内容）= divider.top（相对 NestedScrollView）
+            // 要让 divider 出现在 NestedScrollView 高度的 50% 处：
+            // scrollY = divider.top - (contentScroll.height / 2)
+            val halfHeight = contentScroll.height / 2
+            val targetY = (divider.top - halfHeight).coerceAtLeast(0)
             contentScroll.smoothScrollTo(0, targetY)
         }
     }
@@ -691,9 +692,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.4"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.5"
         } catch (_: Exception) {
-            "1.3.4"
+            "1.3.5"
         }
     }
 
