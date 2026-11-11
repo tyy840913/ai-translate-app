@@ -1,6 +1,12 @@
 name: Build APK
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -31,38 +37,15 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: 从 sources.txt 展开项目文件
-        run: |
-          python3 << 'PYEOF'
-          import os, re
-
-          with open('sources.txt', encoding='utf-8') as f:
-              text = f.read()
-
-          marks = list(re.finditer(r'^##### FILE: (.+?) #####$', text, re.M))
-          if not marks:
-              raise SystemExit('sources.txt 中没有找到任何文件标记')
-
-          for i, m in enumerate(marks):
-              path = m.group(1).strip()
-              start = m.end()
-              end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
-              body = text[start:end].strip('\n') + '\n'
-              d = os.path.dirname(path)
-              if d:
-                  os.makedirs(d, exist_ok=True)
-              with open(path, 'w', encoding='utf-8') as out:
-                  out.write(body)
-              print('生成:', path)
-
-          print('完成，共', len(marks), '个文件')
-          PYEOF
-
       - name: 编译 APK
-        run: gradle assembleDebug --no-daemon
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: 查看产物
+        run: ls -lh app/build/outputs/apk/debug/
 
       - name: 上传 APK
         uses: actions/upload-artifact@v6
         with:
-          name: AIWebShell-APK
+          name: AI-Translate-APK
           path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30

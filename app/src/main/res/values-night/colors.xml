@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary">#8FA4FF</color>
+    <color name="primary_dark">#6D86F5</color>
+    <color name="accent">#B49CFF</color>
+    <color name="on_primary">#10142A</color>
+    <color name="primary_container">#252C4A</color>
+
+    <color name="bg">#0E1120</color>
+    <color name="bg_top">#151A33</color>
+    <color name="surface">#171B2E</color>
+
+    <color name="text_primary">#F2F4FF</color>
+    <color name="text_secondary">#A0A8BF</color>
+    <color name="text_hint">#6F7891</color>
+
+    <color name="card_stroke">#272D45</color>
+    <color name="chip_bg">#1E2438</color>
+    <color name="divider">#232941</color>
+
+    <color name="error">#FF8A8A</color>
+    <color name="warning_bg">#2A2113</color>
+    <color name="warning">#F5B95A</color>
+
+    <color name="header_start">#4F6BFF</color>
+    <color name="header_end">#7C3AED</color>
+    <color name="ic_launcher_background">#4F6BFF</color>
+</resources>

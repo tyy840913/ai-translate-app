@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AI 翻译</string>
+    <string name="app_tagline">OpenAI 兼容 · 自动翻译</string>
+
+    <string name="menu">打开菜单</string>
+    <string name="history">翻译历史</string>
+    <string name="api_settings">API 设置</string>
+    <string name="clear_current">清空当前</string>
+    <string name="about">关于</string>
+
+    <string name="version_format">版本 %1$s</string>
+    <string name="about_title">关于 AI 翻译</string>
+    <string name="about_message">AI 翻译 v%1$s\n\n只支持 OpenAI 兼容接口（Chat Completions），可添加多个配置并随时切换。\n\nAPI Key 与历史记录仅保存在本机应用私有目录，不会上传到任何第三方服务器；翻译内容只会发送到你配置的接口。\n\n输入文字后停顿约 1 秒会自动翻译，也可以点击「立即翻译」。</string>
+
+    <string name="input_label">原文</string>
+    <string name="input_hint">输入或粘贴需要翻译的文字…</string>
+    <string name="char_count">%1$d/%2$d</string>
+    <string name="clear_input">清空输入</string>
+
+    <string name="source_language">源语言</string>
+    <string name="target_language">目标语言</string>
+    <string name="swap_language">交换语言</string>
+    <string name="translate_now">立即翻译</string>
+    <string name="output_label">译文</string>
+    <string name="to_lang">→ %1$s</string>
+    <string name="output_placeholder">译文将在这里显示</string>
+    <string name="output_hint">输入停顿约 1 秒自动翻译 · 历史仅保存在本机</string>
+    <string name="copy">复制译文</string>
+    <string name="share">分享译文</string>
+    <string name="share_translation">分享译文</string>
+    <string name="translation_label">译文</string>
+    <string name="copied">已复制译文</string>
+    <string name="no_translation_yet">还没有译文</string>
+
+    <string name="api_banner_title">尚未配置翻译接口</string>
+    <string name="api_banner_subtitle">点击添加 OpenAI 兼容 API</string>
+    <string name="api_not_configured">请先添加并选择 OpenAI 兼容接口</string>
+
+    <string name="pick_source_language">选择源语言</string>
+    <string name="pick_target_language">选择目标语言</string>
+    <string name="cancel">取消</string>
+    <string name="save">保存</string>
+    <string name="edit">编辑</string>
+    <string name="delete">删除</string>
+    <string name="clear">清空</string>
+    <string name="got_it">知道了</string>
+
+    <string name="please_input_text">请输入需要翻译的文字</string>
+    <string name="translate_failed">翻译失败：%1$s</string>
+    <string name="network_error">网络异常，请检查网络和接口地址</string>
+    <string name="error_401">API Key 无效或未授权（401）</string>
+    <string name="error_403">接口拒绝访问（403）</string>
+    <string name="error_404">接口地址或模型不存在（404）</string>
+    <string name="error_429">请求过于频繁或额度不足（429）</string>
+    <string name="error_timeout">请求超时，请检查网络</string>
+    <string name="error_host">无法连接服务器，请检查网络或接口地址</string>
+
+    <string name="clear_current_message">将清空输入框和当前译文，历史记录不受影响。</string>
+    <string name="clear_history">清空历史</string>
+    <string name="clear_history_message">确定清空全部翻译历史吗？此操作不可恢复。</string>
+    <string name="delete_history">删除记录</string>
+    <string name="delete_history_message">确定删除这条翻译记录吗？</string>
+    <string name="clear_history_action">清空全部历史</string>
+
+    <string name="settings_info">只支持 OpenAI 兼容接口（Chat Completions）。添加后点击卡片切换使用，长按卡片可编辑或删除。API Key 仅保存在本机。</string>
+    <string name="add_api">添加接口</string>
+    <string name="edit_api">编辑接口</string>
+    <string name="api_name">名称</string>
+    <string name="api_name_hint">例如：OpenAI / 中转站</string>
+    <string name="base_url">接口地址（Base URL）</string>
+    <string name="base_url_hint">https://api.openai.com/v1</string>
+    <string name="api_key">API Key</string>
+    <string name="api_key_hint">sk-…（可留空）</string>
+    <string name="model">模型</string>
+    <string name="model_hint">gpt-4o-mini</string>
+    <string name="dialog_profile_hint">请求地址会自动补全为 Base URL + /chat/completions；Key 仅保存在本机。</string>
+    <string name="please_enter_url">请输入接口地址</string>
+    <string name="please_enter_model">请输入模型名称</string>
+    <string name="default_profile_name">OpenAI</string>
+    <string name="active_badge">使用中</string>
+    <string name="switched_to">已切换到「%1$s」</string>
+    <string name="delete_profile">删除接口</string>
+    <string name="delete_profile_message">确定删除「%1$s」吗？删除后不可恢复。</string>
+    <string name="more">更多操作</string>
+    <string name="add">添加接口</string>
+    <string name="back">返回</string>
+
+    <string name="empty_api_title">还没有接口配置</string>
+    <string name="empty_api_subtitle">点击右下角 + 添加一个 OpenAI 兼容接口</string>
+    <string name="empty_history_title">还没有翻译记录</string>
+    <string name="empty_history_subtitle">翻译成功后会自动保存在这里</string>
+</resources>
