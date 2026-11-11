@@ -40,6 +40,44 @@ object Languages {
     val source: List<String> = listOf(AUTO) + languages
     val target: List<String> = listOf(SMART) + languages
 
+    /**
+     * 给模型看的目标语言名称。中英文都给，减少模型对「中文」等词的歧义。
+     */
+    private val promptNames: Map<String, String> = mapOf(
+        "中文" to "Simplified Chinese (简体中文)",
+        "繁体中文" to "Traditional Chinese (繁體中文)",
+        "英语" to "English",
+        "日语" to "Japanese (日本語)",
+        "韩语" to "Korean (한국어)",
+        "法语" to "French (Français)",
+        "德语" to "German (Deutsch)",
+        "西班牙语" to "Spanish (Español)",
+        "俄语" to "Russian (Русский)",
+        "葡萄牙语" to "Portuguese (Português)",
+        "意大利语" to "Italian (Italiano)",
+        "阿拉伯语" to "Arabic (العربية)",
+        "泰语" to "Thai (ไทย)",
+        "越南语" to "Vietnamese (Tiếng Việt)",
+        "印尼语" to "Indonesian (Bahasa Indonesia)",
+        "土耳其语" to "Turkish (Türkçe)",
+        "荷兰语" to "Dutch (Nederlands)",
+        "波兰语" to "Polish (Polski)",
+        "乌克兰语" to "Ukrainian (Українська)",
+        "印地语" to "Hindi (हिन्दी)",
+        "马来语" to "Malay (Bahasa Melayu)",
+        "瑞典语" to "Swedish (Svenska)",
+        "希腊语" to "Greek (Ελληνικά)",
+        "希伯来语" to "Hebrew (עברית)",
+        "捷克语" to "Czech (Čeština)",
+        "罗马尼亚语" to "Romanian (Română)",
+        "匈牙利语" to "Hungarian (Magyar)",
+        "芬兰语" to "Finnish (Suomi)",
+        "丹麦语" to "Danish (Dansk)",
+        "挪威语" to "Norwegian (Norsk)"
+    )
+
+    fun promptName(language: String): String = promptNames[language] ?: language
+
     fun normalizeTarget(value: String?): String {
         return if (value != null && target.contains(value)) value else SMART
     }

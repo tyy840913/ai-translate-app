@@ -16,6 +16,7 @@ class HistoryActivity : AppCompatActivity() {
         const val EXTRA_OUTPUT = "output"
         const val EXTRA_SOURCE = "source"
         const val EXTRA_TARGET = "target"
+        const val EXTRA_IMAGE = "image"
     }
 
     private lateinit var adapter: HistoryAdapter
@@ -57,6 +58,7 @@ class HistoryActivity : AppCompatActivity() {
             putExtra(EXTRA_OUTPUT, entry.output)
             putExtra(EXTRA_SOURCE, entry.source)
             putExtra(EXTRA_TARGET, entry.target)
+            putExtra(EXTRA_IMAGE, entry.image)
         }
         setResult(Activity.RESULT_OK, data)
         finish()

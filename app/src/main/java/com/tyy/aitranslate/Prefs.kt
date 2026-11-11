@@ -108,7 +108,8 @@ object Prefs {
                         target = o.optString("target"),
                         input = o.optString("input"),
                         output = o.optString("output"),
-                        time = o.optLong("time")
+                        time = o.optLong("time"),
+                        image = o.optBoolean("image", false)
                     )
                 )
             }
@@ -127,16 +128,28 @@ object Prefs {
             o.put("input", h.input)
             o.put("output", h.output)
             o.put("time", h.time)
+            o.put("image", h.image)
             array.put(o)
         }
         prefs(context).edit().putString(KEY_HISTORY, array.toString()).apply()
     }
 
-    fun addHistory(context: Context, source: String, target: String, input: String, output: String) {
+    fun addHistory(
+        context: Context,
+        source: String,
+        target: String,
+        input: String,
+        output: String,
+        image: Boolean = false
+    ) {
         val list = history(context)
         if (list.isNotEmpty()) {
             val newest = list[0]
-            if (newest.input == input && newest.source == source && newest.target == target) {
+            if (newest.input == input &&
+                newest.source == source &&
+                newest.target == target &&
+                newest.image == image
+            ) {
                 list.removeAt(0)
             }
         }
@@ -148,7 +161,8 @@ object Prefs {
                 target = target,
                 input = input,
                 output = output,
-                time = System.currentTimeMillis()
+                time = System.currentTimeMillis(),
+                image = image
             )
         )
         while (list.size > MAX_HISTORY) list.removeAt(list.size - 1)

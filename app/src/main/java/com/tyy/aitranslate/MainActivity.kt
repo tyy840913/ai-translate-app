@@ -1,18 +1,22 @@
 package com.tyy.aitranslate
 
+import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.text.Editable
-import android.text.InputFilter
 import android.text.TextWatcher
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -20,16 +24,17 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import java.io.File
 import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
 
     private companion object {
-        const val MAX_CHARS = 2000
         const val AUTO_DELAY_MS = 900L
     }
 
@@ -38,13 +43,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var outputText: TextView
     private lateinit var outputError: TextView
     private lateinit var outputLang: TextView
+    private lateinit var outputArea: View
+    private lateinit var divider: View
     private lateinit var progress: ProgressBar
-    private lateinit var charCount: TextView
     private lateinit var targetValue: TextView
     private lateinit var apiBanner: MaterialCardView
     private lateinit var btnCopy: ImageButton
     private lateinit var btnShare: ImageButton
-    private lateinit var btnTranslate: View
+    private lateinit var btnClear: ImageButton
+    private lateinit var btnCamera: ImageButton
+    private lateinit var btnTranslate: ImageButton
+    private lateinit var photoContainer: View
+    private lateinit var photoPreview: ImageView
 
     private val handler = Handler(Looper.getMainLooper())
     private val executor = Executors.newCachedThreadPool()
@@ -54,6 +64,19 @@ class MainActivity : AppCompatActivity() {
     private var requestSeq = 0
     private var restoring = false
     private var hasTranslation = false
+    private var pendingPhotoUri: Uri? = null
+    private var photoUri: Uri? = null
+    private var photoBase64: String? = null
+
+    private val cameraLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val uri = pendingPhotoUri
+            pendingPhotoUri = null
+            if (result.resultCode == RESULT_OK && uri != null) {
+                showPhoto(uri)
+                translatePhoto()
+            }
+        }
 
     private val historyLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -61,14 +84,41 @@ class MainActivity : AppCompatActivity() {
             val data = result.data ?: return@registerForActivityResult
             val input = data.getStringExtra(HistoryActivity.EXTRA_INPUT).orEmpty()
             val output = data.getStringExtra(HistoryActivity.EXTRA_OUTPUT).orEmpty()
+            val isImage = data.getBooleanExtra(HistoryActivity.EXTRA_IMAGE, false)
             val restoredTarget = Languages.normalizeTarget(
                 data.getStringExtra(HistoryActivity.EXTRA_TARGET)
             )
+
+            clearPhotoState()
+            requestSeq++
+            handler.removeCallbacks(translateRunnable)
+
+            if (isImage) {
+                restoring = true
+                inputText.setText("")
+                restoring = false
+                btnClear.visibility = View.GONE
+                targetLang =
+                    if (restoredTarget == Languages.SMART) Languages.SMART else restoredTarget
+                updateTargetViews()
+                if (output.isBlank()) {
+                    showIdle()
+                } else {
+                    showResult(
+                        output,
+                        if (targetLang == Languages.SMART) getString(R.string.smart_target)
+                        else targetLang
+                    )
+                }
+                toast(getString(R.string.image_history_hint))
+                return@registerForActivityResult
+            }
 
             restoring = true
             inputText.setText(input)
             inputText.setSelection(inputText.text.length)
             restoring = false
+            btnClear.visibility = if (input.isEmpty()) View.GONE else View.VISIBLE
 
             // 如果历史译文正好符合智能模式的默认目标，保持「智能」不变。
             targetLang =
@@ -81,8 +131,6 @@ class MainActivity : AppCompatActivity() {
                 }
             updateTargetViews()
 
-            requestSeq++
-            handler.removeCallbacks(translateRunnable)
             if (output.isBlank()) showIdle() else showResult(output, restoredTarget)
         }
 
@@ -95,30 +143,38 @@ class MainActivity : AppCompatActivity() {
         outputText = findViewById(R.id.output_text)
         outputError = findViewById(R.id.output_error)
         outputLang = findViewById(R.id.output_lang)
+        outputArea = findViewById(R.id.output_area)
+        divider = findViewById(R.id.divider)
         progress = findViewById(R.id.translate_progress)
-        charCount = findViewById(R.id.char_count)
         targetValue = findViewById(R.id.target_lang_value)
         apiBanner = findViewById(R.id.api_banner)
         btnCopy = findViewById(R.id.btn_copy)
         btnShare = findViewById(R.id.btn_share)
+        btnClear = findViewById(R.id.btn_clear)
+        btnCamera = findViewById(R.id.btn_camera)
         btnTranslate = findViewById(R.id.btn_translate)
+        photoContainer = findViewById(R.id.photo_container)
+        photoPreview = findViewById(R.id.photo_preview)
 
         targetLang = Prefs.targetLang(this)
         updateTargetViews()
         showIdle()
 
-        inputText.filters = arrayOf(InputFilter.LengthFilter(MAX_CHARS))
         inputText.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
             override fun afterTextChanged(s: Editable?) {
-                charCount.text = getString(R.string.char_count, s?.length ?: 0, MAX_CHARS)
+                val text = s?.toString().orEmpty()
+                btnClear.visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
                 if (restoring) return
+                if (photoUri != null) {
+                    if (text.isBlank()) return
+                    clearPhotoState()
+                }
                 updateTargetViews()
                 handler.removeCallbacks(translateRunnable)
                 requestSeq++
-                if (s.isNullOrBlank()) {
-                    requestSeq++
+                if (text.isBlank()) {
                     showIdle()
                     updateApiBanner()
                     return
@@ -136,20 +192,14 @@ class MainActivity : AppCompatActivity() {
             drawerLayout.openDrawer(GravityCompat.START)
         }
         findViewById<View>(R.id.btn_history).setOnClickListener { openHistory() }
-        findViewById<View>(R.id.btn_clear).setOnClickListener {
-            restoring = true
-            inputText.setText("")
-            restoring = false
-            requestSeq++
-            handler.removeCallbacks(translateRunnable)
-            showIdle()
-            updateApiBanner()
-        }
+        findViewById<View>(R.id.btn_remove_photo).setOnClickListener { clearAll() }
+        btnClear.setOnClickListener { clearAll() }
         findViewById<View>(R.id.api_banner).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
 
         btnTranslate.setOnClickListener { translateNow(true) }
+        btnCamera.setOnClickListener { takePhoto() }
         btnCopy.setOnClickListener { copyTranslation() }
         btnShare.setOnClickListener { shareTranslation() }
 
@@ -188,17 +238,22 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateApiBanner()
-        if (Prefs.profiles(this).isNotEmpty() &&
-            inputText.text.isNotBlank() &&
-            !hasTranslation
-        ) {
-            handler.removeCallbacks(translateRunnable)
-            handler.postDelayed(translateRunnable, 300)
+        if (Prefs.profiles(this).isEmpty()) return
+        when {
+            photoUri != null && !hasTranslation -> {
+                handler.removeCallbacks(translateRunnable)
+                handler.postDelayed({ translatePhoto() }, 300)
+            }
+            inputText.text.isNotBlank() && !hasTranslation -> {
+                handler.removeCallbacks(translateRunnable)
+                handler.postDelayed(translateRunnable, 300)
+            }
         }
     }
 
     override fun onDestroy() {
         handler.removeCallbacks(translateRunnable)
+        photoPreview.setImageDrawable(null)
         executor.shutdownNow()
         super.onDestroy()
     }
@@ -212,14 +267,15 @@ class MainActivity : AppCompatActivity() {
         targetValue.text =
             if (targetLang == Languages.SMART) getString(R.string.smart_target) else targetLang
 
-        val text = inputText.text.toString()
-        if (text.isBlank() && targetLang == Languages.SMART) {
-            outputLang.visibility = View.GONE
-            return
+        if (outputArea.visibility != View.VISIBLE) return
+        val shownTarget = when {
+            photoUri != null ->
+                if (targetLang == Languages.SMART) getString(R.string.smart_target) else targetLang
+            else -> {
+                val text = inputText.text.toString()
+                if (text.isBlank()) targetLang else Languages.resolveTarget(text, targetLang)
+            }
         }
-        outputLang.visibility = View.VISIBLE
-        val shownTarget =
-            if (text.isBlank()) targetLang else Languages.resolveTarget(text, targetLang)
         outputLang.text = getString(R.string.to_lang, shownTarget)
     }
 
@@ -228,20 +284,17 @@ class MainActivity : AppCompatActivity() {
         val labels = values.map {
             if (it == Languages.SMART) getString(R.string.smart_target_recommended) else it
         }
-        val checked = values.indexOf(targetLang).coerceAtLeast(0)
 
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.pick_target_language)
-            .setMessage(R.string.smart_target_hint)
-            .setSingleChoiceItems(labels.toTypedArray(), checked) { dialog, which ->
+            .setItems(labels.toTypedArray()) { _, which ->
                 val value = values[which]
                 targetLang = value
                 Prefs.setTargetLang(this, value)
                 updateTargetViews()
-                dialog.dismiss()
-                if (inputText.text.isNotBlank()) {
-                    handler.removeCallbacks(translateRunnable)
-                    translateNow(false)
+                when {
+                    photoUri != null -> translatePhoto()
+                    inputText.text.isNotBlank() -> translateNow(false)
                 }
             }
             .setNegativeButton(R.string.cancel, null)
@@ -250,6 +303,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun translateNow(fromButton: Boolean) {
         handler.removeCallbacks(translateRunnable)
+        if (photoUri != null) {
+            translatePhoto()
+            return
+        }
         val text = inputText.text.toString().trim()
         if (text.isEmpty()) {
             if (fromButton) toast(getString(R.string.please_input_text))
@@ -267,18 +324,23 @@ class MainActivity : AppCompatActivity() {
         }
 
         val seq = ++requestSeq
-        val requestSource = Languages.AUTO
         val requestTarget = Languages.resolveTarget(text, targetLang)
         showLoading(requestTarget)
 
         executor.execute {
-            val result = TranslateClient.translate(profile, text, requestSource, requestTarget)
+            val result = TranslateClient.translate(profile, text, requestTarget)
             handler.post {
                 if (seq != requestSeq || isFinishing || isDestroyed) return@post
                 val translated = result.getOrNull()
                 if (!translated.isNullOrBlank()) {
                     showResult(translated, requestTarget)
-                    Prefs.addHistory(this, requestSource, requestTarget, text, translated)
+                    Prefs.addHistory(
+                        this,
+                        Languages.AUTO,
+                        requestTarget,
+                        text,
+                        translated
+                    )
                 } else {
                     showErrorText(
                         getString(R.string.translate_failed, friendlyError(result.exceptionOrNull()))
@@ -286,6 +348,148 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun translatePhoto() {
+        handler.removeCallbacks(translateRunnable)
+        val uri = photoUri ?: return
+        val profile = Prefs.activeProfile(this)
+        if (profile == null) {
+            updateApiBanner()
+            showErrorText(getString(R.string.api_not_configured))
+            return
+        }
+
+        val smart = targetLang == Languages.SMART
+        val requestTarget = if (smart) Languages.SMART else Languages.normalizeTarget(targetLang)
+        val displayTarget =
+            if (smart) getString(R.string.smart_target) else requestTarget
+        val seq = ++requestSeq
+        showLoading(displayTarget)
+
+        val cached = photoBase64
+        if (cached != null) {
+            requestPhotoTranslation(profile, cached, requestTarget, smart, displayTarget, seq)
+            return
+        }
+
+        executor.execute {
+            val prepared = runCatching { PhotoUtils.prepare(this, uri) }
+            handler.post {
+                if (seq != requestSeq || isFinishing || isDestroyed) return@post
+                val data = prepared.getOrNull()
+                if (data == null) {
+                    showErrorText(
+                        getString(
+                            R.string.translate_failed,
+                            friendlyError(prepared.exceptionOrNull())
+                        )
+                    )
+                    return@post
+                }
+                photoPreview.setImageBitmap(data.preview)
+                photoBase64 = data.base64
+                requestPhotoTranslation(
+                    profile,
+                    data.base64,
+                    requestTarget,
+                    smart,
+                    displayTarget,
+                    seq
+                )
+            }
+        }
+    }
+
+    private fun requestPhotoTranslation(
+        profile: ApiProfile,
+        base64: String,
+        target: String,
+        smart: Boolean,
+        displayTarget: String,
+        seq: Int
+    ) {
+        executor.execute {
+            val result = TranslateClient.translateImage(profile, base64, target, smart)
+            handler.post {
+                if (seq != requestSeq || isFinishing || isDestroyed) return@post
+                val translated = result.getOrNull()
+                if (!translated.isNullOrBlank()) {
+                    showResult(translated, displayTarget)
+                    Prefs.addHistory(
+                        this,
+                        Languages.AUTO,
+                        target,
+                        getString(R.string.image_translation),
+                        translated,
+                        image = true
+                    )
+                } else {
+                    showErrorText(
+                        getString(R.string.translate_failed, friendlyError(result.exceptionOrNull()))
+                    )
+                }
+            }
+        }
+    }
+
+    private fun showPhoto(uri: Uri) {
+        photoUri = uri
+        photoBase64 = null
+        photoContainer.visibility = View.VISIBLE
+        inputText.visibility = View.GONE
+        btnClear.visibility = View.GONE
+        photoPreview.setImageDrawable(null)
+        restoring = true
+        inputText.setText("")
+        restoring = false
+        hideKeyboard()
+        showIdle()
+    }
+
+    private fun clearPhotoState() {
+        photoUri = null
+        photoBase64 = null
+        photoContainer.visibility = View.GONE
+        photoPreview.setImageDrawable(null)
+        inputText.visibility = View.VISIBLE
+    }
+
+    private fun takePhoto() {
+        val dir = File(cacheDir, "images")
+        if (!dir.exists() && !dir.mkdirs()) {
+            toast(getString(R.string.photo_read_failed))
+            return
+        }
+        val file = File(dir, "photo_${System.currentTimeMillis()}.jpg")
+        val uri = try {
+            FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        } catch (_: Exception) {
+            toast(getString(R.string.photo_read_failed))
+            return
+        }
+        pendingPhotoUri = uri
+
+        val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+            putExtra(MediaStore.EXTRA_OUTPUT, uri)
+            addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            clipData = ClipData.newRawUri("photo", uri)
+        }
+        try {
+            cameraLauncher.launch(intent)
+        } catch (_: ActivityNotFoundException) {
+            pendingPhotoUri = null
+            toast(getString(R.string.camera_unavailable))
+        } catch (_: Exception) {
+            pendingPhotoUri = null
+            toast(getString(R.string.camera_unavailable))
+        }
+    }
+
+    private fun hideKeyboard() {
+        val manager = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        manager.hideSoftInputFromWindow(inputText.windowToken, 0)
     }
 
     private fun friendlyError(error: Throwable?): String {
@@ -305,6 +509,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showLoading(target: String) {
+        divider.visibility = View.VISIBLE
+        outputArea.visibility = View.VISIBLE
         progress.visibility = View.VISIBLE
         outputError.visibility = View.GONE
         outputLang.visibility = View.VISIBLE
@@ -316,6 +522,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showResult(text: String, target: String) {
+        divider.visibility = View.VISIBLE
+        outputArea.visibility = View.VISIBLE
         hasTranslation = true
         outputText.text = text
         outputText.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
@@ -328,21 +536,24 @@ class MainActivity : AppCompatActivity() {
 
     private fun showIdle() {
         hasTranslation = false
-        outputText.text = getString(R.string.output_placeholder)
-        outputText.setTextColor(ContextCompat.getColor(this, R.color.text_hint))
-        outputError.visibility = View.GONE
+        divider.visibility = View.GONE
+        outputArea.visibility = View.GONE
         progress.visibility = View.GONE
-        updateTargetViews()
+        outputError.visibility = View.GONE
+        outputText.text = ""
         setActionsEnabled(false)
+        updateTargetViews()
     }
 
     private fun showErrorText(message: String) {
+        divider.visibility = View.VISIBLE
+        outputArea.visibility = View.VISIBLE
         outputError.text = message
         outputError.visibility = View.VISIBLE
         progress.visibility = View.GONE
         setActionsEnabled(hasTranslation)
         if (!hasTranslation) {
-            outputText.text = getString(R.string.output_placeholder)
+            outputText.text = ""
             outputText.setTextColor(ContextCompat.getColor(this, R.color.text_hint))
         }
     }
@@ -382,19 +593,23 @@ class MainActivity : AppCompatActivity() {
         historyLauncher.launch(Intent(this, HistoryActivity::class.java))
     }
 
+    private fun clearAll() {
+        restoring = true
+        inputText.setText("")
+        restoring = false
+        clearPhotoState()
+        btnClear.visibility = View.GONE
+        requestSeq++
+        handler.removeCallbacks(translateRunnable)
+        showIdle()
+        updateApiBanner()
+    }
+
     private fun confirmClear() {
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.clear_current)
             .setMessage(R.string.clear_current_message)
-            .setPositiveButton(R.string.clear) { _, _ ->
-                restoring = true
-                inputText.setText("")
-                restoring = false
-                requestSeq++
-                handler.removeCallbacks(translateRunnable)
-                showIdle()
-                updateApiBanner()
-            }
+            .setPositiveButton(R.string.clear) { _, _ -> clearAll() }
             .setNegativeButton(R.string.cancel, null)
             .show()
     }
@@ -409,9 +624,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.1.0"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.2.0"
         } catch (_: Exception) {
-            "1.1.0"
+            "1.2.0"
         }
     }
 

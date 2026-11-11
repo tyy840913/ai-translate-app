@@ -9,14 +9,56 @@ import java.net.URL
 
 object TranslateClient {
     private const val CONNECT_TIMEOUT = 20_000
-    private const val READ_TIMEOUT = 90_000
+    private const val READ_TIMEOUT = 120_000
 
-    fun translate(
+    fun translate(profile: ApiProfile, text: String, target: String): Result<String> {
+        val targetName = Languages.promptName(target)
+        val messages = JSONArray().apply {
+            put(message("system", textSystemPrompt()))
+            put(
+                message(
+                    "user",
+                    "Translate the text below into $targetName. " +
+                        "Output only the translation.\n\n<text>\n$text\n</text>"
+                )
+            )
+        }
+        return request(profile, messages)
+    }
+
+    fun translateImage(
         profile: ApiProfile,
-        text: String,
-        source: String,
-        target: String
+        imageBase64: String,
+        target: String,
+        smart: Boolean
     ): Result<String> {
+        val content = JSONArray().apply {
+            put(
+                JSONObject()
+                    .put("type", "text")
+                    .put("text", "Read all text in this image and translate it.")
+            )
+            put(
+                JSONObject()
+                    .put("type", "image_url")
+                    .put(
+                        "image_url",
+                        JSONObject().put("url", "data:image/jpeg;base64,$imageBase64")
+                    )
+            )
+        }
+        val messages = JSONArray().apply {
+            put(message("system", imageSystemPrompt(target, smart)))
+            put(JSONObject().put("role", "user").put("content", content))
+        }
+        return request(profile, messages)
+    }
+
+    private fun message(role: String, content: String): JSONObject {
+        return JSONObject().put("role", role).put("content", content)
+    }
+
+    private fun request(profile: ApiProfile, messages: JSONArray): Result<String> {
         return try {
             if (profile.baseUrl.isBlank()) {
                 return Result.failure(IOException("请先在设置中填写接口地址"))
@@ -29,17 +71,7 @@ object TranslateClient {
             val payload = JSONObject().apply {
                 put("model", profile.model.trim())
                 put("stream", false)
-                put(
-                    "messages",
-                    JSONArray().apply {
-                        put(
-                            JSONObject()
-                                .put("role", "system")
-                                .put("content", systemPrompt(source, target))
-                        )
-                        put(JSONObject().put("role", "user").put("content", text))
-                    }
-                )
+                put("messages", messages)
             }
 
             val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
@@ -49,7 +81,7 @@ object TranslateClient {
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "AITranslate/1.0 (Android)")
+                setRequestProperty("User-Agent", "AITranslate/1.2 (Android)")
                 if (profile.apiKey.isNotBlank()) {
                     setRequestProperty("Authorization", "Bearer ${profile.apiKey.trim()}")
                 }
@@ -115,21 +147,31 @@ object TranslateClient {
         }
     }
 
-    private fun systemPrompt(source: String, target: String): String {
-        val sourceLine = if (source == Languages.AUTO) {
-            "源语言：自动检测"
+    private fun textSystemPrompt(): String {
+        return """
+            You are a professional translation engine.
+            The user's text may be in any language, including English. Detect the source language automatically, then translate it into the target language given in the user message.
+            Always produce a translation. Never copy or repeat the source text unless the source is already written in the target language.
+            Requirements:
+            1. Output only the translated text. No explanations, labels, quotes, or extra text.
+            2. Preserve the original line breaks, punctuation and paragraph structure.
+            3. Keep names, brands, code, URLs and numbers unchanged unless there is an established translation.
+            4. Do not wrap the output in Markdown code fences.
+        """.trimIndent()
+    }
+
+    private fun imageSystemPrompt(target: String, smart: Boolean): String {
+        val targetRule = if (smart) {
+            "Determine the main language of the text in the image. If it is mainly Chinese, translate into English; otherwise translate into Simplified Chinese."
         } else {
-            "源语言：$source"
+            "Translate all text in the image into ${Languages.promptName(target)}."
         }
         return """
-            你是专业翻译引擎。请把用户提供的文本翻译成$target。
-            $sourceLine
-            要求：
-            1. 只输出译文，不要解释、不要加引号、不要添加任何前后缀。
-            2. 保留原文的换行、标点和段落格式。
-            3. 人名、品牌、代码、URL、数字保持原样，除非存在约定俗成的译名。
-            4. 如果原文已经是$target，原样返回。
-            5. 不要使用 Markdown 代码块包裹译文。
+            You are a professional OCR and translation engine.
+            Read all visible text in the image. $targetRule
+            Output only the translation. Do not output the original text, OCR notes, or explanations.
+            Preserve line breaks and punctuation. Keep names, code, URLs and numbers unchanged.
+            Do not use Markdown fences. If there is no readable text, output: 图片中未识别到文字
         """.trimIndent()
     }
 

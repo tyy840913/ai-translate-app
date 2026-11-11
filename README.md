@@ -6,10 +6,13 @@
 
 ## 功能
 
-- **单页翻译**：原文和译文合并在同一张卡片中，中间用横线分隔；输入文字后停顿约 1 秒自动翻译，也可点击「立即翻译」
+- **全屏单卡片翻译**：没有顶部标题，只保留左上角菜单和右上角历史；原文和译文在同一个框内，开始翻译后才出现中间横线
 - **智能翻译**：输入中文自动翻译成英文，输入其他语言自动翻译成中文；源语言无需选择
-- **手动目标语言**：翻译卡片右下角「译成」可切换目标语言（默认「智能」），选择后立即重新翻译
-- **历史记录**：右上角入口，自动保存最近 200 条；点击记录可回填原文和译文
+- **手动目标语言**：左下角显示「智能」或具体语种，点击弹出语言列表；选择后立即重新翻译
+- **刷新按钮**：右下角双箭头按钮，点击重新翻译当前内容
+- **拍照翻译**：点击相机按钮拍摄图片，图片会压缩后按 OpenAI Vision 格式发送给模型，译文显示在同一个框内
+- **字数不设上限**：输入框不再限制 2000 字
+- **历史记录**：右上角入口，自动保存最近 200 条；点击文字记录可回填原文和译文，图片记录保留译文
 - **API 配置**：左侧三横菜单 → API 设置，可添加多个 OpenAI 兼容接口（名称 / Base URL / API Key / 模型），点击卡片切换使用，长按编辑或删除
 - **复制与分享**：译文可一键复制或调用系统分享
 - **深色模式**：跟随系统自动切换
@@ -31,15 +34,33 @@ App 会自动补全请求地址：
 - `https://api.openai.com` → `https://api.openai.com/v1/chat/completions`
 - 已以 `/chat/completions` 结尾则原样使用
 
-请求体为标准 OpenAI Chat Completions：
+请求体为标准 OpenAI Chat Completions。文字翻译示例：
 
 ```json
 {
   "model": "gpt-4o-mini",
   "stream": false,
   "messages": [
-    {"role": "system", "content": "你是专业翻译引擎……"},
-    {"role": "user", "content": "需要翻译的文字"}
+    {
+      "role": "system",
+      "content": "You are a professional translation engine. The input may be in any language, including English. Translate it into the target language given in the user message. Never return the source unchanged unless it is already in the target language. Output only the translation."
+    },
+    {
+      "role": "user",
+      "content": "Translate the text below into English. Output only the translation.\n\n<text>\n你好，世界\n</text>"
+    }
+  ]
+}
+```
+
+拍照翻译使用 OpenAI Vision 的 `image_url` 格式（需要模型支持图片输入）：
+
+```json
+{
+  "role": "user",
+  "content": [
+    {"type": "text", "text": "Read all text in this image and translate it."},
+    {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,..."}}
   ]
 }
 ```
@@ -82,7 +103,8 @@ app/src/main/java/com/tyy/aitranslate/
 ├── SettingsActivity.kt    # API 配置管理
 ├── HistoryActivity.kt     # 翻译历史
 ├── Prefs.kt               # 本机存储（接口配置、历史、语言）
-├── TranslateClient.kt     # OpenAI 兼容 HTTP 请求
+├── TranslateClient.kt     # OpenAI 兼容 HTTP 请求（文字 + 图片）
+├── PhotoUtils.kt          # 拍照图片压缩、EXIF 方向修正、Base64 编码
 ├── Languages.kt           # 语言列表与中文检测、智能目标语言
 ├── Models.kt              # 数据模型
 ├── ProfileAdapter.kt      # 接口列表适配器
@@ -91,7 +113,11 @@ app/src/main/java/com/tyy/aitranslate/
 
 ## 说明
 
+- 当前版本 **1.2.0**（versionCode 3）
 - 自动翻译基于「输入停顿 900ms」触发，长文本会消耗较多 token
 - 智能目标语言通过本地判断：含汉字且不含日文假名/韩文时视为中文，翻译成英文；其他情况翻译成中文
+- 拍照翻译会先用系统相机拍照，图片在本地按最长边 1600px、JPEG 85% 压缩，并按 EXIF 修正方向后上传；调用的是系统相机，不需要申请相机权限
+- 图片翻译需要所选模型支持 Vision（`image_url`）。不支持图片输入的模型会返回错误，请改用支持视觉的模型
+- 图片翻译历史只保留译文，不保存原图，回填时输入框为空
 - 历史最多保留 200 条，超出后自动删除最旧记录
 - 开启 `usesCleartextTraffic` 以支持局域网 HTTP 接口；如只使用 HTTPS，可在 `AndroidManifest.xml` 中关闭

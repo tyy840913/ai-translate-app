@@ -14,5 +14,6 @@ data class HistoryEntry(
     val target: String,
     val input: String,
     val output: String,
-    val time: Long
+    val time: Long,
+    val image: Boolean = false
 )
