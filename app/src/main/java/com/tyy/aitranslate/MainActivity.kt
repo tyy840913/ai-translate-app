@@ -71,6 +71,7 @@ class MainActivity : AppCompatActivity() {
     private var requestSeq = 0
     private var restoring = false
     private var hasTranslation = false
+    private var hasScrolledToResult = false
     private var pendingPhotoUri: Uri? = null
     private var photoUri: Uri? = null
     private var photoBase64: String? = null
@@ -197,16 +198,20 @@ class MainActivity : AppCompatActivity() {
         var lastWindowHeight = 0
         rootLayout.viewTreeObserver.addOnGlobalLayoutListener {
             val newHeight = rootLayout.height
-            // 有译文 OR 正在翻译中（loading）时都需要重新滚动到 50% 位置
-            if (lastWindowHeight != 0 && (hasTranslation || progress.visibility == View.VISIBLE) && newHeight != lastWindowHeight) {
+            // 只有第一次显示译文时滚动，后续键盘变化不再滚动
+            if (!hasScrolledToResult && lastWindowHeight != 0 && newHeight != lastWindowHeight &&
+                (hasTranslation || progress.visibility == View.VISIBLE)
+            ) {
                 lastWindowHeight = newHeight
                 contentScroll.post {
                     val halfHeight = contentScroll.height / 2
                     val targetY = (divider.top - halfHeight).coerceAtLeast(0)
                     contentScroll.smoothScrollTo(0, targetY)
+                    hasScrolledToResult = true
                 }
+            } else {
+                lastWindowHeight = newHeight
             }
-            lastWindowHeight = newHeight
         }
 
         inputText.addTextChangedListener(object : TextWatcher {
@@ -590,6 +595,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showIdle() {
         hasTranslation = false
+        hasScrolledToResult = false
         lastOutputTarget = ""
         divider.visibility = View.GONE
         outputArea.visibility = View.GONE
@@ -640,6 +646,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun scrollToResult() {
+        if (hasScrolledToResult) return
         contentScroll.post {
             // 译文区从卡片高度的 50% 位置开始显示：上半部分留给输入，下半部分留给译文。
             // 计算：divider 的绝对位置（相对内容）= divider.top（相对 NestedScrollView）
@@ -648,6 +655,7 @@ class MainActivity : AppCompatActivity() {
             val halfHeight = contentScroll.height / 2
             val targetY = (divider.top - halfHeight).coerceAtLeast(0)
             contentScroll.smoothScrollTo(0, targetY)
+            hasScrolledToResult = true
         }
     }
 
@@ -710,9 +718,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.9"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.10"
         } catch (_: Exception) {
-            "1.3.9"
+            "1.3.10"
         }
     }
 
