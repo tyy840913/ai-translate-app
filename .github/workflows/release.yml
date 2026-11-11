@@ -2,7 +2,7 @@ name: Release APK
 
 on:
   push:
-    tags: ['v*.*.*']
+    tags: ['v1.3.21']
 
 permissions:
   contents: write
