@@ -40,12 +40,21 @@ jobs:
         run: gradle assembleRelease --no-daemon --stacktrace
 
       - name: 创建 Release 并上传 APK
-        uses: actions/github-release@v1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: ${{ github.ref_name }}
-          name: AI Translate ${{ github.ref_name }}
-          body: 自动构建
-          generate_release_notes: false
-          draft: false
-          prerelease: false
+        run: |
+          GH_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          API="https://api.github.com/repos/${{ github.repository }}"
+          TAG="${{ github.ref_name }}"
+          APK="app/build/outputs/apk/release/app-release.apk"
+          FILENAME="AI-Translate-${TAG}.apk"
+
+          REL_ID=$(curl -s -H "Authorization: token $GH_TOKEN" -X POST \
+            -H "Content-Type: application/json" \
+            -d "{\"tag_name\":\"$TAG\",\"name\":\"AI Translate $TAG\",\"body\":\"自动构建\"}" \
+            "$API/releases" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('id', d.get('message','ERROR')))")
+          echo "release_id=$REL_ID"
+
+          curl -s -H "Authorization: token $GH_TOKEN" -X POST \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @"$APK" \
+            "$API/releases/$REL_ID/assets?name=$FILENAME" \
+            | python3 -c "import json,sys; d=json.load(sys.stdin); print('asset:', d.get('name'), d.get('state'), d.get('size'))"
