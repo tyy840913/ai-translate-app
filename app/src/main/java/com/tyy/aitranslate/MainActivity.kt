@@ -213,10 +213,10 @@ class MainActivity : AppCompatActivity() {
             lastKeyboardHeight = keyboardHeight
 
             if (keyboardChanged) {
-                // 等 viewport 实际收缩/恢复后再设区域高度并滚到顶部
+                // 等 viewport 实际收缩/恢复后，只重设输入区高度（保持 4:6 比例），
+                // 不强制滚到顶部，保留用户当前滚动位置。
                 contentScroll.postDelayed({
                     setAreaHeights()
-                    contentScroll.smoothScrollTo(0, 0)
                 }, 150)
             }
         }
@@ -613,15 +613,15 @@ class MainActivity : AppCompatActivity() {
         outputError.visibility = View.GONE
         outputText.text = ""
         setActionsEnabled(false)
-        // 复位区域高度为 wrap_content（-2），无译文时整个卡片可点击输入
+        // 复位为 wrap_content，无译文时整个卡片可点击输入
         inputArea.layoutParams = inputArea.layoutParams.apply {
             height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
         }
-        inputArea.minimumHeight = 180
+        inputArea.minimumHeight = (180 * resources.displayMetrics.density).toInt()
         outputArea.layoutParams = outputArea.layoutParams.apply {
             height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
         }
-        outputArea.minimumHeight = 200
+        outputArea.minimumHeight = (200 * resources.displayMetrics.density).toInt()
         contentScroll.smoothScrollTo(0, 0)
         updateTargetViews()
     }
@@ -674,22 +674,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 按当前 viewport 高度设置输入区 40% / 译文区 60%。
-     * 键盘弹出后 viewport 收缩，两区域同比缩小；键盘收起后 viewport 恢复，两区域同比放大。
+     * 动态设置输入区高度为当前 viewport 的 40%。
+     * 译文区保持 wrap_content 不锁死高度：译文短则自然占剩余（约 60%），
+     * 译文长则继续向下滚动，避免锁死。
+     * 键盘弹出后 viewport 收缩，输入区同比缩小；键盘收起后 viewport 恢复，输入区同比放大。
      */
     private fun setAreaHeights() {
         val h = contentScroll.height
         if (h == 0) return
         val inputHeight = (h * 0.4f).toInt()
-        val outputHeight = (h * 0.6f).toInt()
         inputArea.layoutParams = inputArea.layoutParams.apply {
             this.height = inputHeight
         }
         inputArea.minimumHeight = 0
+        // 译文区保持 wrap_content，不设固定高度，可无限长滚动
         outputArea.layoutParams = outputArea.layoutParams.apply {
-            this.height = outputHeight
+            this.height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
         }
-        outputArea.minimumHeight = 0
+        outputArea.minimumHeight = (200 * resources.displayMetrics.density).toInt()
     }
 
     private fun scrollInputToCursor() {
@@ -767,9 +769,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.17"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.18"
         } catch (_: Exception) {
-            "1.3.17"
+            "1.3.18"
         }
     }
 
