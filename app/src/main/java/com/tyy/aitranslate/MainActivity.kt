@@ -216,7 +216,7 @@ class MainActivity : AppCompatActivity() {
                 // 等 viewport 实际收缩/恢复后再设区域高度并滚到顶部
                 contentScroll.postDelayed({
                     setAreaHeights()
-                    contentScroll.scrollTo(0, 0)
+                    contentScroll.smoothScrollTo(0, 0)
                 }, 150)
             }
         }
@@ -617,11 +617,12 @@ class MainActivity : AppCompatActivity() {
         inputArea.layoutParams = inputArea.layoutParams.apply {
             height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
         }
+        inputArea.minimumHeight = 180
         outputArea.layoutParams = outputArea.layoutParams.apply {
             height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-            minimumHeight = 200
         }
-        contentScroll.scrollTo(0, 0)
+        outputArea.minimumHeight = 200
+        contentScroll.smoothScrollTo(0, 0)
         updateTargetViews()
     }
 
@@ -683,12 +684,12 @@ class MainActivity : AppCompatActivity() {
         val outputHeight = (h * 0.6f).toInt()
         inputArea.layoutParams = inputArea.layoutParams.apply {
             this.height = inputHeight
-            this.minimumHeight = 0
         }
+        inputArea.minimumHeight = 0
         outputArea.layoutParams = outputArea.layoutParams.apply {
             this.height = outputHeight
-            this.minimumHeight = 0
         }
+        outputArea.minimumHeight = 0
     }
 
     private fun scrollInputToCursor() {
