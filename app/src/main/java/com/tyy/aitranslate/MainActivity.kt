@@ -193,9 +193,11 @@ class MainActivity : AppCompatActivity() {
 
         // 键盘弹出/收起时卡片高度变化，重新把译文区滚回 50% 位置。
         var lastScrollHeight = contentScroll.height
-        contentScroll.addOnLayoutChangeListener { _, _, _, _, _, oldHeight, _ ->
-            if (oldHeight != 0 && hasTranslation && oldHeight != lastScrollHeight) {
-                lastScrollHeight = contentScroll.height
+        contentScroll.addOnLayoutChangeListener { v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            val newHeight = bottom - top
+            val oldHeight = oldBottom - oldTop
+            if (oldHeight != 0 && hasTranslation && newHeight != oldHeight) {
+                lastScrollHeight = newHeight
                 scrollToResult()
             }
         }
