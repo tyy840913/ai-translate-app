@@ -1,8 +1,12 @@
 name: Release APK
 
 on:
-  push:
-    tags: ['v1.3.21']
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "要发布的 tag（如 v1.3.21）"
+        required: true
+        default: "v1.3.21"
 
 permissions:
   contents: write
@@ -45,7 +49,11 @@ jobs:
         run: |
           set -euo pipefail
           API="https://api.github.com/repos/${{ github.repository }}"
-          TAG="${{ github.ref_name }}"
+          TAG="${{ inputs.tag_name }}"
+          if [ -z "$TAG" ]; then
+            echo "No tag_name provided"
+            exit 1
+          fi
           APK="app/build/outputs/apk/release/app-release.apk"
           FILENAME="AI-Translate-${TAG}.apk"
 

@@ -74,7 +74,7 @@ class MainActivity : AppCompatActivity() {
     private var pendingPhotoUri: Uri? = null
     private var photoUri: Uri? = null
     private var photoBase64: String? = null
-    private var keyboardHeight = 0
+    private var lastViewportHeight = 0
 
     private val cameraLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -190,34 +190,31 @@ class MainActivity : AppCompatActivity() {
             }, 100)
         }
         inputText.setOnClickListener {
-            // 键盘已弹出时立即定位；首次点击交给 OnGlobalLayout 在键盘弹出后定位，
-            // 避免用键盘弹出前的全高 viewport 算出错误位置。
-            if (keyboardHeight > 0) scrollInputToCursor()
+            // 首次点击交给 OnGlobalLayout 在 viewport 收缩后定位；
+            // 后续点击（viewport 已收缩）直接定位到当前光标位置。
+            if (contentScroll.height > 0 && lastViewportHeight == contentScroll.height) {
+                scrollInputToCursor()
+            }
         }
 
-        // 监听窗口高度变化，只在键盘真正弹出/收起时做一次定位。
-        // OnGlobalLayout 在布局完成后回调，此时 contentScroll.height 已是新的 viewport，
-        // 比固定延时更可靠（部分 ROM 的 insets 恢复慢于 150ms）。
+        // 监听 contentScroll 的高度变化，只在 viewport 真正收缩/恢复时做一次定位。
+        // 用 contentScroll.height 而非 insets 差值：键盘收起时 viewport 必然变大，
+        // 比「windowHeight - visibleHeight」更可靠（后者在某些 ROM 上一拍才归 0）。
         contentScroll.viewTreeObserver.addOnGlobalLayoutListener {
-            val rect = android.graphics.Rect()
-            contentScroll.getWindowVisibleDisplayFrame(rect)
-            val visibleHeight = rect.bottom - rect.top
-            if (visibleHeight <= 0) return@addOnGlobalLayoutListener
-            val windowHeight = contentScroll.rootView?.height ?: 0
-            val newKeyboardHeight = (windowHeight - visibleHeight).coerceAtLeast(0)
-            val previous = keyboardHeight
-            if (newKeyboardHeight == previous) return@addOnGlobalLayoutListener
-            keyboardHeight = newKeyboardHeight
+            val newViewport = contentScroll.height
+            if (newViewport == 0 || newViewport == lastViewportHeight) return@addOnGlobalLayoutListener
+            val previous = lastViewportHeight
+            lastViewportHeight = newViewport
 
             when {
-                // 键盘弹出：viewport 已收缩，把光标定位到可视区中间
-                previous == 0 && newKeyboardHeight > 0 -> {
+                // viewport 收缩（键盘弹出）：把光标定位到新的可视区中间
+                newViewport < previous -> {
                     if (inputText.hasFocus()) {
                         contentScroll.post { scrollInputToCursor() }
                     }
                 }
-                // 键盘收起：viewport 已恢复，有译文则重新定位到 1/3 处
-                previous > 0 && newKeyboardHeight == 0 -> {
+                // viewport 恢复（键盘收起）：有译文则重新定位到 1/3 处
+                newViewport > previous -> {
                     if (hasTranslation) {
                         contentScroll.post { scrollToResult() }
                     }
@@ -584,7 +581,9 @@ class MainActivity : AppCompatActivity() {
         outputText.setTextColor(ContextCompat.getColor(this, R.color.text_hint))
         hasTranslation = false
         setActionsEnabled(false)
-        // 加载中不滚动：等译文真正到达后由 showResult 一次性定位，避免两次平滑滚动互相打断。
+        // 加载中也滚一次：让「翻译中」占位可见（用户编辑长文本后 viewport 已滚到底，
+        // 不滚的话「翻译中」会在屏幕外）；结果到达后 showResult 会再滚到 1/3 处。
+        scrollToResult()
     }
 
     private fun showResult(text: String, target: String) {
@@ -742,9 +741,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.21"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.22"
         } catch (_: Exception) {
-            "1.3.21"
+            "1.3.22"
         }
     }
 
