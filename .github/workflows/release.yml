@@ -40,9 +40,10 @@ jobs:
         run: gradle assembleRelease --no-daemon --stacktrace
 
       - name: 创建 Release 并上传 APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          GH_TOKEN="${{ secrets.GITHUB_TOKEN }}"
           API="https://api.github.com/repos/${{ github.repository }}"
           TAG="${{ github.ref_name }}"
           APK="app/build/outputs/apk/release/app-release.apk"
