@@ -204,7 +204,7 @@ class MainActivity : AppCompatActivity() {
                             val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
                             imm.showSoftInput(inputText, InputMethodManager.SHOW_IMPLICIT)
                         }, 50)
-                        return true
+                        return@setOnTouchListener true
                     }
                 }
             }
