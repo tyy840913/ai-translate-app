@@ -143,23 +143,23 @@
                         <FrameLayout
                             android:id="@+id/input_area"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:minHeight="180dp">
+                            android:layout_height="wrap_content">
 
                             <EditText
                                 android:id="@+id/input_text"
                                 android:layout_width="match_parent"
-                                android:layout_height="match_parent"
+                                android:layout_height="wrap_content"
                                 android:background="@null"
                                 android:gravity="top|start"
                                 android:hint="@string/input_hint"
                                 android:importantForAutofill="no"
                                 android:inputType="textMultiLine"
-                                android:isScrollContainer="true"
+                                android:isScrollContainer="false"
                                 android:lineSpacingExtra="5dp"
                                 android:paddingStart="2dp"
                                 android:paddingTop="2dp"
                                 android:paddingEnd="34dp"
+                                android:scrollbars="none"
                                 android:textColor="@color/text_primary"
                                 android:textColorHint="@color/text_hint"
                                 android:textSize="18sp" />

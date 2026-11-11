@@ -193,40 +193,6 @@ class MainActivity : AppCompatActivity() {
             scrollInputToCursor()
         }
 
-        // 首次布局后，把输入区固定为 viewport 的 40%（译文区占剩余 60%）。
-        // 只在第一次生效，后续键盘弹出/收起不再重新计算。
-        var hasSetAreaHeights = false
-        contentScroll.viewTreeObserver.addOnGlobalLayoutListener {
-            if (hasSetAreaHeights) return@addOnGlobalLayoutListener
-            if (contentScroll.height == 0) return@addOnGlobalLayoutListener
-            hasSetAreaHeights = true
-            val viewport = contentScroll.height
-            val inputHeight = (viewport * 0.4).toInt()
-            val lp = inputArea.layoutParams
-            lp.height = inputHeight
-            inputArea.layoutParams = lp
-        }
-
-        // 键盘弹出/收起时窗口高度变化，只在第一次显示译文时滚动到 50% 位置。
-        val rootLayout = findViewById<View>(android.R.id.content)
-        var lastWindowHeight = 0
-        rootLayout.viewTreeObserver.addOnGlobalLayoutListener {
-            val newHeight = rootLayout.height
-            if (!hasScrolledToResult && lastWindowHeight != 0 && newHeight != lastWindowHeight &&
-                (hasTranslation || progress.visibility == View.VISIBLE)
-            ) {
-                lastWindowHeight = newHeight
-                contentScroll.post {
-                    val halfHeight = contentScroll.height / 2
-                    val targetY = (divider.top - halfHeight).coerceAtLeast(0)
-                    contentScroll.smoothScrollTo(0, targetY)
-                    hasScrolledToResult = true
-                }
-            } else {
-                lastWindowHeight = newHeight
-            }
-        }
-
         inputText.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
@@ -660,9 +626,6 @@ class MainActivity : AppCompatActivity() {
         if (hasScrolledToResult) return
         contentScroll.post {
             // 译文区从卡片高度的 50% 位置开始显示：上半部分留给输入，下半部分留给译文。
-            // 计算：divider 的绝对位置（相对内容）= divider.top（相对 NestedScrollView）
-            // 要让 divider 出现在 NestedScrollView 高度的 50% 处：
-            // scrollY = divider.top - (contentScroll.height / 2)
             val halfHeight = contentScroll.height / 2
             val targetY = (divider.top - halfHeight).coerceAtLeast(0)
             contentScroll.smoothScrollTo(0, targetY)
@@ -674,13 +637,13 @@ class MainActivity : AppCompatActivity() {
         val selection = inputText.selectionStart.coerceAtLeast(inputText.selectionEnd)
         val layout = inputText.layout ?: return
         val line = layout.getLineForOffset(selection)
-        val lineTop = layout.getLineTop(line)
-        val cursorTopInInputArea = lineTop + inputText.paddingTop
+        val lineBottom = layout.getLineBottom(line)
+        val cursorYInEditText = lineBottom + inputText.paddingTop
         val inputAreaTopInScroll = inputArea.top
-        val cursorYInScroll = inputAreaTopInScroll + cursorTopInInputArea
+        val cursorYInScroll = inputAreaTopInScroll + cursorYInEditText
         val viewportHeight = contentScroll.height
         if (viewportHeight == 0) return
-        // 把光标行滚动到可视区的垂直中间位置
+        // 把光标行滚动到键盘弹出后可视区的垂直中间位置
         val targetY = (cursorYInScroll - viewportHeight / 2).coerceAtLeast(0)
         contentScroll.smoothScrollTo(0, targetY)
     }
@@ -743,9 +706,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.12"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.13"
         } catch (_: Exception) {
-            "1.3.12"
+            "1.3.13"
         }
     }
 

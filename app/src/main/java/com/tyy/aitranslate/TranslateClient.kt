@@ -71,6 +71,7 @@ object TranslateClient {
             val payload = JSONObject().apply {
                 put("model", profile.model.trim())
                 put("stream", false)
+                put("temperature", 0.1)
                 put("reasoning_effort", "none")
                 // GLM / Qwen3 系列认 chat_template_kwargs.enable_thinking；OpenAI 系列忽略该字段，无副作用
                 put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
@@ -152,10 +153,16 @@ object TranslateClient {
 
     private fun textSystemPrompt(): String {
         return """
-            You are a professional translation engine.
+            You are a professional translation engine with deterministic output.
             The user's text may be in any language or a mixture of multiple languages. Detect the source language(s) automatically, then translate everything into the target language given in the user message.
-            Accuracy is the top priority: choose the most natural, precise, and context-appropriate translation. Avoid literal word-by-word translation; convey the intended meaning, tone, and register.
-            Requirements:
+
+            Consistency rules (critical):
+            - For the same input, always produce the same translation. Do not vary word choice between calls.
+            - Use the most standard, widely-accepted translation for each word/phrase. Prefer dictionary-standard usage over creative alternatives.
+            - For proper nouns, technical terms, and common vocabulary, use the established canonical translation (e.g. "computer" → 计算机/电脑, not 电脑/计算机/微机 — pick one and stay consistent).
+            - Avoid synonyms when a direct equivalent exists. If a word has multiple accepted translations, always pick the most common one.
+
+            Accuracy requirements:
             1. Output only the translated text. No explanations, labels, quotes, or extra text.
             2. Preserve the original line breaks, punctuation and paragraph structure.
             3. Keep names, brands, code, URLs and numbers unchanged unless there is an established translation.
