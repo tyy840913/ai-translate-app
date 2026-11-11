@@ -71,6 +71,7 @@ object TranslateClient {
             val payload = JSONObject().apply {
                 put("model", profile.model.trim())
                 put("stream", false)
+                put("reasoning_effort", "none")
                 put("messages", messages)
             }
 
