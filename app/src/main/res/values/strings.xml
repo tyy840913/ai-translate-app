@@ -11,21 +11,24 @@
 
     <string name="version_format">版本 %1$s</string>
     <string name="about_title">关于 AI 翻译</string>
-    <string name="about_message">AI 翻译 v%1$s\n\n只支持 OpenAI 兼容接口（Chat Completions），可添加多个配置并随时切换。\n\nAPI Key 与历史记录仅保存在本机应用私有目录，不会上传到任何第三方服务器；翻译内容只会发送到你配置的接口。\n\n输入文字后停顿约 1 秒会自动翻译，也可以点击「立即翻译」。</string>
+    <string name="about_message">AI 翻译 v%1$s\n\n只支持 OpenAI 兼容接口（Chat Completions），可添加多个配置并随时切换。\n\n默认智能翻译：输入中文自动翻译成英文，输入其他语言自动翻译成中文；也可以在翻译框右下角手动切换目标语言。\n\nAPI Key 与历史记录仅保存在本机应用私有目录，不会上传到任何第三方服务器；翻译内容只会发送到你配置的接口。\n\n输入文字后停顿约 1 秒会自动翻译，也可以点击「立即翻译」。</string>
 
     <string name="input_label">原文</string>
     <string name="input_hint">输入或粘贴需要翻译的文字…</string>
     <string name="char_count">%1$d/%2$d</string>
     <string name="clear_input">清空输入</string>
 
-    <string name="source_language">源语言</string>
-    <string name="target_language">目标语言</string>
-    <string name="swap_language">交换语言</string>
+    <string name="translate_to">译成</string>
+    <string name="smart_target">智能</string>
+    <string name="smart_target_recommended">智能（推荐）</string>
+    <string name="smart_target_hint">智能模式：中文翻译成英文，其他语言翻译成中文。选择具体语言后，固定翻译成该语言。</string>
+    <string name="pick_target_language">选择目标语言</string>
     <string name="translate_now">立即翻译</string>
+    <string name="translating">翻译中…</string>
     <string name="output_label">译文</string>
     <string name="to_lang">→ %1$s</string>
     <string name="output_placeholder">译文将在这里显示</string>
-    <string name="output_hint">输入停顿约 1 秒自动翻译 · 历史仅保存在本机</string>
+    <string name="output_hint">智能翻译：中文→英文，其他语言→中文 · 历史仅保存在本机</string>
     <string name="copy">复制译文</string>
     <string name="share">分享译文</string>
     <string name="share_translation">分享译文</string>
@@ -37,8 +40,6 @@
     <string name="api_banner_subtitle">点击添加 OpenAI 兼容 API</string>
     <string name="api_not_configured">请先添加并选择 OpenAI 兼容接口</string>
 
-    <string name="pick_source_language">选择源语言</string>
-    <string name="pick_target_language">选择目标语言</string>
     <string name="cancel">取消</string>
     <string name="save">保存</string>
     <string name="edit">编辑</string>

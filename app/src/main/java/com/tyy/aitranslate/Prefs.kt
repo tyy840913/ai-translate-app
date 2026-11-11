@@ -9,8 +9,8 @@ object Prefs {
     private const val KEY_PROFILES = "profiles"
     private const val KEY_ACTIVE = "active_profile"
     private const val KEY_HISTORY = "history"
-    private const val KEY_SOURCE = "source_lang"
     private const val KEY_TARGET = "target_lang"
+    private const val KEY_TARGET_SMART = "target_lang_smart_default"
     private const val MAX_HISTORY = 200
 
     private fun prefs(context: Context) =
@@ -165,20 +165,26 @@ object Prefs {
 
     // ---------- 语言 ----------
 
-    fun sourceLang(context: Context): String {
-        val value = prefs(context).getString(KEY_SOURCE, Languages.AUTO)
-        return if (value != null && Languages.source.contains(value)) value else Languages.AUTO
-    }
-
-    fun setSourceLang(context: Context, value: String) {
-        prefs(context).edit().putString(KEY_SOURCE, value).apply()
-    }
-
+    /**
+     * 首次升级到智能版本时，强制把已保存的目标语言切到「智能」；
+     * 之后用户手动选择的目标语言会正常保留。
+     */
     fun targetLang(context: Context): String {
-        return Languages.normalizeTarget(prefs(context).getString(KEY_TARGET, "中文"))
+        val p = prefs(context)
+        if (!p.getBoolean(KEY_TARGET_SMART, false)) {
+            p.edit()
+                .putString(KEY_TARGET, Languages.SMART)
+                .putBoolean(KEY_TARGET_SMART, true)
+                .apply()
+            return Languages.SMART
+        }
+        return Languages.normalizeTarget(p.getString(KEY_TARGET, Languages.SMART))
     }
 
     fun setTargetLang(context: Context, value: String) {
-        prefs(context).edit().putString(KEY_TARGET, value).apply()
+        prefs(context).edit()
+            .putString(KEY_TARGET, value)
+            .putBoolean(KEY_TARGET_SMART, true)
+            .apply()
     }
 }

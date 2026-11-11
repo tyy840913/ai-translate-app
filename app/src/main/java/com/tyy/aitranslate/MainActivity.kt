@@ -40,7 +40,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var outputLang: TextView
     private lateinit var progress: ProgressBar
     private lateinit var charCount: TextView
-    private lateinit var sourceValue: TextView
     private lateinit var targetValue: TextView
     private lateinit var apiBanner: MaterialCardView
     private lateinit var btnCopy: ImageButton
@@ -51,8 +50,7 @@ class MainActivity : AppCompatActivity() {
     private val executor = Executors.newCachedThreadPool()
     private val translateRunnable = Runnable { translateNow(false) }
 
-    private var sourceLang = Languages.AUTO
-    private var targetLang = "中文"
+    private var targetLang = Languages.SMART
     private var requestSeq = 0
     private var restoring = false
     private var hasTranslation = false
@@ -63,18 +61,29 @@ class MainActivity : AppCompatActivity() {
             val data = result.data ?: return@registerForActivityResult
             val input = data.getStringExtra(HistoryActivity.EXTRA_INPUT).orEmpty()
             val output = data.getStringExtra(HistoryActivity.EXTRA_OUTPUT).orEmpty()
-            sourceLang = data.getStringExtra(HistoryActivity.EXTRA_SOURCE) ?: sourceLang
-            targetLang = Languages.normalizeTarget(data.getStringExtra(HistoryActivity.EXTRA_TARGET))
-            updateLanguageLabels()
+            val restoredTarget = Languages.normalizeTarget(
+                data.getStringExtra(HistoryActivity.EXTRA_TARGET)
+            )
 
             restoring = true
             inputText.setText(input)
             inputText.setSelection(inputText.text.length)
             restoring = false
 
+            // 如果历史译文正好符合智能模式的默认目标，保持「智能」不变。
+            targetLang =
+                if (targetLang == Languages.SMART &&
+                    restoredTarget == Languages.resolveTarget(input, Languages.SMART)
+                ) {
+                    Languages.SMART
+                } else {
+                    restoredTarget
+                }
+            updateTargetViews()
+
             requestSeq++
             handler.removeCallbacks(translateRunnable)
-            if (output.isBlank()) showIdle() else showResult(output)
+            if (output.isBlank()) showIdle() else showResult(output, restoredTarget)
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -88,16 +97,14 @@ class MainActivity : AppCompatActivity() {
         outputLang = findViewById(R.id.output_lang)
         progress = findViewById(R.id.translate_progress)
         charCount = findViewById(R.id.char_count)
-        sourceValue = findViewById(R.id.source_lang_value)
         targetValue = findViewById(R.id.target_lang_value)
         apiBanner = findViewById(R.id.api_banner)
         btnCopy = findViewById(R.id.btn_copy)
         btnShare = findViewById(R.id.btn_share)
         btnTranslate = findViewById(R.id.btn_translate)
 
-        sourceLang = Prefs.sourceLang(this)
         targetLang = Prefs.targetLang(this)
-        updateLanguageLabels()
+        updateTargetViews()
         showIdle()
 
         inputText.filters = arrayOf(InputFilter.LengthFilter(MAX_CHARS))
@@ -107,6 +114,7 @@ class MainActivity : AppCompatActivity() {
             override fun afterTextChanged(s: Editable?) {
                 charCount.text = getString(R.string.char_count, s?.length ?: 0, MAX_CHARS)
                 if (restoring) return
+                updateTargetViews()
                 handler.removeCallbacks(translateRunnable)
                 requestSeq++
                 if (s.isNullOrBlank()) {
@@ -123,9 +131,7 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
-        findViewById<View>(R.id.source_lang).setOnClickListener { pickLanguage(true) }
-        findViewById<View>(R.id.target_lang).setOnClickListener { pickLanguage(false) }
-        findViewById<View>(R.id.btn_swap).setOnClickListener { swapLanguages() }
+        findViewById<View>(R.id.target_lang).setOnClickListener { pickTargetLanguage() }
         findViewById<View>(R.id.btn_menu).setOnClickListener {
             drawerLayout.openDrawer(GravityCompat.START)
         }
@@ -202,30 +208,36 @@ class MainActivity : AppCompatActivity() {
             if (Prefs.profiles(this).isEmpty()) View.VISIBLE else View.GONE
     }
 
-    private fun updateLanguageLabels() {
-        sourceValue.text = sourceLang
-        targetValue.text = targetLang
-        outputLang.text = getString(R.string.to_lang, targetLang)
+    private fun updateTargetViews() {
+        targetValue.text =
+            if (targetLang == Languages.SMART) getString(R.string.smart_target) else targetLang
+
+        val text = inputText.text.toString()
+        if (text.isBlank() && targetLang == Languages.SMART) {
+            outputLang.visibility = View.GONE
+            return
+        }
         outputLang.visibility = View.VISIBLE
+        val shownTarget =
+            if (text.isBlank()) targetLang else Languages.resolveTarget(text, targetLang)
+        outputLang.text = getString(R.string.to_lang, shownTarget)
     }
 
-    private fun pickLanguage(source: Boolean) {
-        val list = if (source) Languages.source else Languages.target
-        val current = if (source) sourceLang else targetLang
-        val checked = list.indexOf(current).coerceAtLeast(0)
+    private fun pickTargetLanguage() {
+        val values = Languages.target
+        val labels = values.map {
+            if (it == Languages.SMART) getString(R.string.smart_target_recommended) else it
+        }
+        val checked = values.indexOf(targetLang).coerceAtLeast(0)
 
         MaterialAlertDialogBuilder(this)
-            .setTitle(if (source) R.string.pick_source_language else R.string.pick_target_language)
-            .setSingleChoiceItems(list.toTypedArray(), checked) { dialog, which ->
-                val value = list[which]
-                if (source) {
-                    sourceLang = value
-                    Prefs.setSourceLang(this, value)
-                } else {
-                    targetLang = value
-                    Prefs.setTargetLang(this, value)
-                }
-                updateLanguageLabels()
+            .setTitle(R.string.pick_target_language)
+            .setMessage(R.string.smart_target_hint)
+            .setSingleChoiceItems(labels.toTypedArray(), checked) { dialog, which ->
+                val value = values[which]
+                targetLang = value
+                Prefs.setTargetLang(this, value)
+                updateTargetViews()
                 dialog.dismiss()
                 if (inputText.text.isNotBlank()) {
                     handler.removeCallbacks(translateRunnable)
@@ -234,25 +246,6 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
-    }
-
-    private fun swapLanguages() {
-        val oldSource = sourceLang
-        val oldTarget = targetLang
-        if (oldSource == Languages.AUTO) {
-            sourceLang = oldTarget
-            targetLang = if (oldTarget == "中文") "英语" else "中文"
-        } else {
-            sourceLang = oldTarget
-            targetLang = oldSource
-        }
-        Prefs.setSourceLang(this, sourceLang)
-        Prefs.setTargetLang(this, targetLang)
-        updateLanguageLabels()
-        if (inputText.text.isNotBlank()) {
-            handler.removeCallbacks(translateRunnable)
-            translateNow(false)
-        }
     }
 
     private fun translateNow(fromButton: Boolean) {
@@ -274,9 +267,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         val seq = ++requestSeq
-        showLoading()
-        val requestSource = sourceLang
-        val requestTarget = targetLang
+        val requestSource = Languages.AUTO
+        val requestTarget = Languages.resolveTarget(text, targetLang)
+        showLoading(requestTarget)
 
         executor.execute {
             val result = TranslateClient.translate(profile, text, requestSource, requestTarget)
@@ -284,7 +277,7 @@ class MainActivity : AppCompatActivity() {
                 if (seq != requestSeq || isFinishing || isDestroyed) return@post
                 val translated = result.getOrNull()
                 if (!translated.isNullOrBlank()) {
-                    showResult(translated)
+                    showResult(translated, requestTarget)
                     Prefs.addHistory(this, requestSource, requestTarget, text, translated)
                 } else {
                     showErrorText(
@@ -311,18 +304,25 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showLoading() {
+    private fun showLoading(target: String) {
         progress.visibility = View.VISIBLE
         outputError.visibility = View.GONE
-        setActionsEnabled(hasTranslation)
+        outputLang.visibility = View.VISIBLE
+        outputLang.text = getString(R.string.to_lang, target)
+        outputText.text = getString(R.string.translating)
+        outputText.setTextColor(ContextCompat.getColor(this, R.color.text_hint))
+        hasTranslation = false
+        setActionsEnabled(false)
     }
 
-    private fun showResult(text: String) {
+    private fun showResult(text: String, target: String) {
         hasTranslation = true
         outputText.text = text
         outputText.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
         outputError.visibility = View.GONE
         progress.visibility = View.GONE
+        outputLang.visibility = View.VISIBLE
+        outputLang.text = getString(R.string.to_lang, target)
         setActionsEnabled(true)
     }
 
@@ -332,6 +332,7 @@ class MainActivity : AppCompatActivity() {
         outputText.setTextColor(ContextCompat.getColor(this, R.color.text_hint))
         outputError.visibility = View.GONE
         progress.visibility = View.GONE
+        updateTargetViews()
         setActionsEnabled(false)
     }
 
@@ -408,9 +409,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.0.0"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.1.0"
         } catch (_: Exception) {
-            "1.0.0"
+            "1.1.0"
         }
     }
 
