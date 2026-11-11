@@ -191,15 +191,21 @@ class MainActivity : AppCompatActivity() {
             }, 100)
         }
 
-        // 键盘弹出/收起时卡片高度变化，重新把译文区滚回 50% 位置。
-        var lastScrollHeight = contentScroll.height
-        contentScroll.addOnLayoutChangeListener { v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
-            val newHeight = bottom - top
-            val oldHeight = oldBottom - oldTop
-            if (oldHeight != 0 && hasTranslation && newHeight != oldHeight) {
-                lastScrollHeight = newHeight
-                scrollToResult()
+        // 键盘弹出/收起时窗口高度变化，重新把译文区滚回 50% 位置。
+        // 用 OnGlobalLayoutListener 监听整个窗口高度变化（比 OnLayoutChangeListener 更可靠）。
+        val rootLayout = findViewById<View>(android.R.id.content)
+        var lastWindowHeight = 0
+        rootLayout.viewTreeObserver.addOnGlobalLayoutListener {
+            val newHeight = rootLayout.height
+            if (lastWindowHeight != 0 && hasTranslation && newHeight != lastWindowHeight) {
+                lastWindowHeight = newHeight
+                contentScroll.post {
+                    val halfHeight = contentScroll.height / 2
+                    val targetY = (divider.top - halfHeight).coerceAtLeast(0)
+                    contentScroll.smoothScrollTo(0, targetY)
+                }
             }
+            lastWindowHeight = newHeight
         }
 
         inputText.addTextChangedListener(object : TextWatcher {
@@ -703,9 +709,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.6"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.7"
         } catch (_: Exception) {
-            "1.3.6"
+            "1.3.7"
         }
     }
 
