@@ -194,9 +194,8 @@ class MainActivity : AppCompatActivity() {
             scrollInputToCursor()
         }
 
-        // 监听窗口高度变化，估算键盘高度并做定位。
-        // 键盘弹出/收起时，等 viewport 实际收缩/恢复后再重滚到 40% 位置，
-        // 避免 adjustResize 把分隔线挤出可视区。
+        // 监听窗口高度变化，动态调整输入区/译文区高度（始终 4:6）。
+        // 键盘弹出时 viewport 缩小，两区域同比缩小；键盘收起时 viewport 恢复，两区域同比放大。
         contentScroll.viewTreeObserver.addOnGlobalLayoutListener {
             val rect = android.graphics.Rect()
             contentScroll.getWindowVisibleDisplayFrame(rect)
@@ -204,19 +203,22 @@ class MainActivity : AppCompatActivity() {
             if (visibleHeight <= 0) return@addOnGlobalLayoutListener
             val windowHeight = contentScroll.rootView?.height ?: 0
             val newKeyboardHeight = (windowHeight - visibleHeight).coerceAtLeast(0)
-            val wasKeyboardShown = lastKeyboardHeight > 0
             keyboardHeight = newKeyboardHeight
 
-            when {
-                // 键盘弹出（0 → >0）：等 viewport 收缩完成后再滚。
-                lastKeyboardHeight == 0 && keyboardHeight > 0 && hasTranslation ->
-                    contentScroll.postDelayed({ scrollToResult() }, 150)
-
-                // 键盘收起（>0 → 0）：等 viewport 恢复完成后再滚。
-                wasKeyboardShown && keyboardHeight == 0 && hasTranslation ->
-                    contentScroll.postDelayed({ scrollToResult() }, 200)
+            val keyboardChanged = when {
+                lastKeyboardHeight == 0 && keyboardHeight > 0 -> true
+                lastKeyboardHeight > 0 && keyboardHeight == 0 -> true
+                else -> false
             }
             lastKeyboardHeight = keyboardHeight
+
+            if (keyboardChanged) {
+                // 等 viewport 实际收缩/恢复后再设区域高度并滚到顶部
+                contentScroll.postDelayed({
+                    setAreaHeights()
+                    contentScroll.scrollTo(0, 0)
+                }, 150)
+            }
         }
 
         inputText.addTextChangedListener(object : TextWatcher {
@@ -578,7 +580,10 @@ class MainActivity : AppCompatActivity() {
         outputText.setTextColor(ContextCompat.getColor(this, R.color.text_hint))
         hasTranslation = false
         setActionsEnabled(false)
-        scrollToResult()
+        contentScroll.post {
+            setAreaHeights()
+            scrollToResult()
+        }
     }
 
     private fun showResult(text: String, target: String) {
@@ -593,7 +598,10 @@ class MainActivity : AppCompatActivity() {
         outputLang.visibility = View.VISIBLE
         outputLang.text = getString(R.string.to_lang, target)
         setActionsEnabled(true)
-        scrollToResult()
+        contentScroll.post {
+            setAreaHeights()
+            scrollToResult()
+        }
     }
 
     private fun showIdle() {
@@ -605,6 +613,14 @@ class MainActivity : AppCompatActivity() {
         outputError.visibility = View.GONE
         outputText.text = ""
         setActionsEnabled(false)
+        // 复位区域高度为 wrap_content（-2），无译文时整个卡片可点击输入
+        inputArea.layoutParams = inputArea.layoutParams.apply {
+            height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+        }
+        outputArea.layoutParams = outputArea.layoutParams.apply {
+            height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            minimumHeight = 200
+        }
         contentScroll.scrollTo(0, 0)
         updateTargetViews()
     }
@@ -649,13 +665,29 @@ class MainActivity : AppCompatActivity() {
 
     private fun scrollToResult() {
         contentScroll.post {
-            // 把分隔线定位到卡片 40% 处：上方 40% 给输入，下方 60% 给译文。
-            // 键盘弹出后 contentScroll.height 已收缩（adjustResize），
-            // 键盘收起后 contentScroll.height 已恢复，直接用当前高度。
-            val visibleHeight = contentScroll.height
-            if (visibleHeight == 0) return@post
-            val targetY = (divider.top - visibleHeight * 0.4f).toInt().coerceAtLeast(0)
+            // 把分隔线滚到 viewport 顶部：上方 40% 给输入（input_area 已设为 40%），
+            // 下方 60% 给译文（output_area 自然占剩余空间）。
+            val targetY = divider.top.coerceAtLeast(0)
             contentScroll.smoothScrollTo(0, targetY)
+        }
+    }
+
+    /**
+     * 按当前 viewport 高度设置输入区 40% / 译文区 60%。
+     * 键盘弹出后 viewport 收缩，两区域同比缩小；键盘收起后 viewport 恢复，两区域同比放大。
+     */
+    private fun setAreaHeights() {
+        val h = contentScroll.height
+        if (h == 0) return
+        val inputHeight = (h * 0.4f).toInt()
+        val outputHeight = (h * 0.6f).toInt()
+        inputArea.layoutParams = inputArea.layoutParams.apply {
+            this.height = inputHeight
+            this.minimumHeight = 0
+        }
+        outputArea.layoutParams = outputArea.layoutParams.apply {
+            this.height = outputHeight
+            this.minimumHeight = 0
         }
     }
 
@@ -668,14 +700,11 @@ class MainActivity : AppCompatActivity() {
         val inputAreaTopInScroll = inputArea.top
         val cursorYInScroll = inputAreaTopInScroll + cursorYInEditText
 
-        // 键盘弹出时，用估算的键盘高度算可视区高度；未弹出时用当前 viewport。
-        val visibleHeight = if (keyboardHeight > 0) {
-            (contentScroll.height - keyboardHeight).coerceAtLeast(100)
-        } else {
-            contentScroll.height
-        }
-        // 光标定位到键盘上方可视区的 1/3 处（偏上，给下方留空间看后续内容）
-        val targetY = (cursorYInScroll - visibleHeight / 3).coerceAtLeast(0)
+        // 把点击点定位到当前 viewport 的垂直中间（50%）。
+        // 键盘弹出后 contentScroll.height 已收缩，直接用当前高度。
+        val viewportHeight = contentScroll.height
+        if (viewportHeight == 0) return
+        val targetY = (cursorYInScroll - viewportHeight / 2).coerceAtLeast(0)
         contentScroll.smoothScrollTo(0, targetY)
     }
 
@@ -737,9 +766,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.16"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.17"
         } catch (_: Exception) {
-            "1.3.16"
+            "1.3.17"
         }
     }
 
