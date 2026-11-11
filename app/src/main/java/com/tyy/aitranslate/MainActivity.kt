@@ -203,16 +203,18 @@ class MainActivity : AppCompatActivity() {
             val visibleHeight = rect.bottom - rect.top
             if (visibleHeight <= 0) return@addOnGlobalLayoutListener
             val windowHeight = contentScroll.rootView?.height ?: 0
-            keyboardHeight = (windowHeight - visibleHeight).coerceAtLeast(0)
+            val newKeyboardHeight = (windowHeight - visibleHeight).coerceAtLeast(0)
+            val wasKeyboardShown = lastKeyboardHeight > 0
+            keyboardHeight = newKeyboardHeight
 
             when {
-                // 键盘弹出（0 → >0）：等 viewport 收缩后重滚，译文占 60% 可视区。
+                // 键盘弹出（0 → >0）：等 viewport 收缩完成后再滚。
                 lastKeyboardHeight == 0 && keyboardHeight > 0 && hasTranslation ->
-                    rescrollAfterKeyboardChange()
+                    contentScroll.postDelayed({ scrollToResult() }, 150)
 
-                // 键盘收起（>0 → 0）：等 viewport 恢复后重滚，定位准确。
-                lastKeyboardHeight > 0 && keyboardHeight == 0 && hasTranslation ->
-                    rescrollAfterKeyboardChange()
+                // 键盘收起（>0 → 0）：等 viewport 恢复完成后再滚。
+                wasKeyboardShown && keyboardHeight == 0 && hasTranslation ->
+                    contentScroll.postDelayed({ scrollToResult() }, 200)
             }
             lastKeyboardHeight = keyboardHeight
         }
@@ -647,21 +649,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun scrollToResult() {
         contentScroll.post {
-            // 键盘弹出时 viewport 会被压缩（adjustResize），用估算的键盘高度
-            // 算收缩后的可视高度，再把分隔线定位到 40% 处（译文占 60%）。
-            val visibleHeight = if (keyboardHeight > 0) {
-                (contentScroll.height - keyboardHeight).coerceAtLeast(100)
-            } else {
-                contentScroll.height
-            }
+            // 把分隔线定位到卡片 40% 处：上方 40% 给输入，下方 60% 给译文。
+            // 键盘弹出后 contentScroll.height 已收缩（adjustResize），
+            // 键盘收起后 contentScroll.height 已恢复，直接用当前高度。
+            val visibleHeight = contentScroll.height
+            if (visibleHeight == 0) return@post
             val targetY = (divider.top - visibleHeight * 0.4f).toInt().coerceAtLeast(0)
             contentScroll.smoothScrollTo(0, targetY)
         }
-    }
-
-    private fun rescrollAfterKeyboardChange() {
-        // 等 viewport 实际收缩/恢复后再重滚，定位才准确。
-        contentScroll.post { scrollToResult() }
     }
 
     private fun scrollInputToCursor() {
@@ -742,9 +737,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.15"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.16"
         } catch (_: Exception) {
-            "1.3.15"
+            "1.3.16"
         }
     }
 
