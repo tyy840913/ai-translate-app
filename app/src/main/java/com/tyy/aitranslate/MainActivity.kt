@@ -26,6 +26,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.GravityCompat
+import androidx.core.widget.NestedScrollView
 import androidx.drawerlayout.widget.DrawerLayout
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -45,11 +46,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var outputLang: TextView
     private lateinit var outputArea: View
     private lateinit var divider: View
+    private lateinit var contentScroll: NestedScrollView
     private lateinit var progress: ProgressBar
     private lateinit var targetValue: TextView
     private lateinit var apiBanner: MaterialCardView
     private lateinit var btnCopy: ImageButton
     private lateinit var btnShare: ImageButton
+    private lateinit var btnFullscreen: ImageButton
     private lateinit var btnClear: ImageButton
     private lateinit var btnCamera: ImageButton
     private lateinit var btnTranslate: ImageButton
@@ -61,6 +64,7 @@ class MainActivity : AppCompatActivity() {
     private val translateRunnable = Runnable { translateNow(false) }
 
     private var targetLang = Languages.SMART
+    private var lastOutputTarget = ""
     private var requestSeq = 0
     private var restoring = false
     private var hasTranslation = false
@@ -145,11 +149,13 @@ class MainActivity : AppCompatActivity() {
         outputLang = findViewById(R.id.output_lang)
         outputArea = findViewById(R.id.output_area)
         divider = findViewById(R.id.divider)
+        contentScroll = findViewById(R.id.content_scroll)
         progress = findViewById(R.id.translate_progress)
         targetValue = findViewById(R.id.target_lang_value)
         apiBanner = findViewById(R.id.api_banner)
         btnCopy = findViewById(R.id.btn_copy)
         btnShare = findViewById(R.id.btn_share)
+        btnFullscreen = findViewById(R.id.btn_fullscreen)
         btnClear = findViewById(R.id.btn_clear)
         btnCamera = findViewById(R.id.btn_camera)
         btnTranslate = findViewById(R.id.btn_translate)
@@ -202,6 +208,7 @@ class MainActivity : AppCompatActivity() {
         btnCamera.setOnClickListener { takePhoto() }
         btnCopy.setOnClickListener { copyTranslation() }
         btnShare.setOnClickListener { shareTranslation() }
+        btnFullscreen.setOnClickListener { openFullscreen() }
 
         findViewById<View>(R.id.nav_api).setOnClickListener {
             drawerLayout.closeDrawer(GravityCompat.START)
@@ -509,6 +516,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showLoading(target: String) {
+        lastOutputTarget = target
         divider.visibility = View.VISIBLE
         outputArea.visibility = View.VISIBLE
         progress.visibility = View.VISIBLE
@@ -522,6 +530,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showResult(text: String, target: String) {
+        lastOutputTarget = target
         divider.visibility = View.VISIBLE
         outputArea.visibility = View.VISIBLE
         hasTranslation = true
@@ -532,16 +541,19 @@ class MainActivity : AppCompatActivity() {
         outputLang.visibility = View.VISIBLE
         outputLang.text = getString(R.string.to_lang, target)
         setActionsEnabled(true)
+        scrollToResult()
     }
 
     private fun showIdle() {
         hasTranslation = false
+        lastOutputTarget = ""
         divider.visibility = View.GONE
         outputArea.visibility = View.GONE
         progress.visibility = View.GONE
         outputError.visibility = View.GONE
         outputText.text = ""
         setActionsEnabled(false)
+        contentScroll.scrollTo(0, 0)
         updateTargetViews()
     }
 
@@ -561,8 +573,33 @@ class MainActivity : AppCompatActivity() {
     private fun setActionsEnabled(enabled: Boolean) {
         btnCopy.isEnabled = enabled
         btnShare.isEnabled = enabled
+        btnFullscreen.isEnabled = enabled
         btnCopy.alpha = if (enabled) 1f else 0.35f
         btnShare.alpha = if (enabled) 1f else 0.35f
+        btnFullscreen.alpha = if (enabled) 1f else 0.35f
+    }
+
+    private fun openFullscreen() {
+        if (!hasTranslation) {
+            toast(getString(R.string.no_translation_yet))
+            return
+        }
+        val text = outputText.text.toString()
+        if (text.isBlank()) {
+            toast(getString(R.string.no_translation_yet))
+            return
+        }
+        FullscreenContent.text = text
+        FullscreenContent.target =
+            lastOutputTarget.ifBlank { targetValue.text.toString() }
+        startActivity(Intent(this, FullscreenActivity::class.java))
+    }
+
+    private fun scrollToResult() {
+        contentScroll.post {
+            val targetY = (divider.top - contentScroll.height / 4).coerceAtLeast(0)
+            contentScroll.smoothScrollTo(0, targetY)
+        }
     }
 
     private fun copyTranslation() {
@@ -624,9 +661,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.2.0"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.0"
         } catch (_: Exception) {
-            "1.2.0"
+            "1.3.0"
         }
     }
 
