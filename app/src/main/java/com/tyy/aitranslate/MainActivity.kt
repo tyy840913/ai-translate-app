@@ -15,6 +15,7 @@ import android.text.TextWatcher
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.ProgressBar
@@ -41,6 +42,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var drawerLayout: DrawerLayout
     private lateinit var inputText: EditText
+    private lateinit var inputArea: FrameLayout
     private lateinit var outputText: TextView
     private lateinit var outputError: TextView
     private lateinit var outputLang: TextView
@@ -144,6 +146,7 @@ class MainActivity : AppCompatActivity() {
 
         drawerLayout = findViewById(R.id.drawer_layout)
         inputText = findViewById(R.id.input_text)
+        inputArea = findViewById(R.id.input_area)
         outputText = findViewById(R.id.output_text)
         outputError = findViewById(R.id.output_error)
         outputLang = findViewById(R.id.output_lang)
@@ -165,6 +168,15 @@ class MainActivity : AppCompatActivity() {
         targetLang = Prefs.targetLang(this)
         updateTargetViews()
         showIdle()
+
+        // 点击 input_area 空白区域也能弹出键盘（EditText 只响应文字区，空白区由 FrameLayout 捕获）
+        inputArea.setOnClickListener {
+            inputText.requestFocus()
+            inputText.postDelayed({
+                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                imm.showSoftInput(inputText, InputMethodManager.SHOW_IMPLICIT)
+            }, 100)
+        }
 
         inputText.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit

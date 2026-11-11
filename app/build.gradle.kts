@@ -19,9 +19,20 @@ android {
         }
     }
 
+    signingConfigs {
+        release {
+            storeFile = file("../keystore/release.p12")
+            storeType = "PKCS12"
+            storePassword = "aitranslate2026"
+            keyAlias = "aitranslate"
+            keyPassword = "aitranslate2026"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.release
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
