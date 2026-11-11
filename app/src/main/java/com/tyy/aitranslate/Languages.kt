@@ -84,31 +84,33 @@ object Languages {
 
     /**
      * 智能模式的目标语言：
-     * 中文 -> 英语；其他语言 -> 中文。
+     * 纯中文（只有汉字，无其他语言文字）→ 英语；
+     * 其他情况（混合语言、纯外文、含中文夹杂其他语言）→ 中文。
      */
     fun resolveTarget(text: String, selectedTarget: String): String {
         if (selectedTarget != SMART) return normalizeTarget(selectedTarget)
-        return if (isChinese(text)) "英语" else "中文"
+        return if (isPureChinese(text)) "英语" else "中文"
     }
 
     /**
-     * 判断文本是否以中文为主。含日文假名或韩文时不算中文，避免误判。
+     * 判断文本是否"纯中文"：含汉字，且不含其他语言的字母（英文 a-z、日文假名、韩文）。
+     * 纯中文 → 翻译成英文；含其他语言 → 翻译成中文。
      */
-    fun isChinese(text: String): Boolean {
+    fun isPureChinese(text: String): Boolean {
         var han = 0
-        var kana = 0
-        var hangul = 0
+        var other = 0
         var index = 0
         while (index < text.length) {
             val codePoint = Character.codePointAt(text, index)
             when {
                 isHan(codePoint) -> han++
-                isKana(codePoint) -> kana++
-                isHangul(codePoint) -> hangul++
+                // 英文字母、日文假名、韩文、希腊字母、西里尔字母等 → 算"其他语言"
+                isLatin(codePoint) || isKana(codePoint) || isHangul(codePoint) ||
+                    isCyrillic(codePoint) || isGreek(codePoint) -> other++
             }
             index += Character.charCount(codePoint)
         }
-        return han > 0 && kana == 0 && hangul == 0
+        return han > 0 && other == 0
     }
 
     private fun isHan(codePoint: Int): Boolean {
@@ -132,5 +134,17 @@ object Languages {
             codePoint in 0xA960..0xA97F ||
             codePoint in 0xAC00..0xD7AF ||
             codePoint in 0xD7B0..0xD7FF
+    }
+
+    private fun isLatin(codePoint: Int): Boolean {
+        return codePoint in 0x0041..0x005A || codePoint in 0x0061..0x007A
+    }
+
+    private fun isCyrillic(codePoint: Int): Boolean {
+        return codePoint in 0x0400..0x04FF || codePoint in 0x0500..0x052F
+    }
+
+    private fun isGreek(codePoint: Int): Boolean {
+        return codePoint in 0x0370..0x03FF || codePoint in 0x1F00..0x1FFF
     }
 }

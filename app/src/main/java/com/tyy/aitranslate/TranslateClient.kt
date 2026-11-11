@@ -153,19 +153,20 @@ object TranslateClient {
     private fun textSystemPrompt(): String {
         return """
             You are a professional translation engine.
-            The user's text may be in any language, including English. Detect the source language automatically, then translate it into the target language given in the user message.
-            Always produce a translation. Never copy or repeat the source text unless the source is already written in the target language.
+            The user's text may be in any language or a mixture of multiple languages. Detect the source language(s) automatically, then translate everything into the target language given in the user message.
+            Accuracy is the top priority: choose the most natural, precise, and context-appropriate translation. Avoid literal word-by-word translation; convey the intended meaning, tone, and register.
             Requirements:
             1. Output only the translated text. No explanations, labels, quotes, or extra text.
             2. Preserve the original line breaks, punctuation and paragraph structure.
             3. Keep names, brands, code, URLs and numbers unchanged unless there is an established translation.
             4. Do not wrap the output in Markdown code fences.
+            5. If the source contains multiple languages, translate all of them into the target language (do not leave any part untranslated).
         """.trimIndent()
     }
 
     private fun imageSystemPrompt(target: String, smart: Boolean): String {
         val targetRule = if (smart) {
-            "Determine the main language of the text in the image. If it is mainly Chinese, translate into English; otherwise translate into Simplified Chinese."
+            "Determine the main language of the text in the image. If all text is purely in Chinese (no other language), translate into English; otherwise translate into Simplified Chinese."
         } else {
             "Translate all text in the image into ${Languages.promptName(target)}."
         }

@@ -143,8 +143,8 @@
                         <FrameLayout
                             android:id="@+id/input_area"
                             android:layout_width="match_parent"
-                            android:layout_height="0dp"
-                            android:layout_weight="40">
+                            android:layout_height="wrap_content"
+                            android:minHeight="180dp">
 
                             <EditText
                                 android:id="@+id/input_text"
@@ -155,12 +155,11 @@
                                 android:hint="@string/input_hint"
                                 android:importantForAutofill="no"
                                 android:inputType="textMultiLine"
-                                android:isScrollContainer="false"
+                                android:isScrollContainer="true"
                                 android:lineSpacingExtra="5dp"
                                 android:paddingStart="2dp"
                                 android:paddingTop="2dp"
                                 android:paddingEnd="34dp"
-                                android:scrollbars="none"
                                 android:textColor="@color/text_primary"
                                 android:textColorHint="@color/text_hint"
                                 android:textSize="18sp" />
@@ -217,7 +216,6 @@
                             android:id="@+id/output_area"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:minHeight="200dp"
                             android:orientation="vertical"
                             android:visibility="gone">
 
@@ -300,11 +298,6 @@
                                 android:textSize="12sp"
                                 android:visibility="gone" />
                         </LinearLayout>
-
-                        <Space
-                            android:layout_width="match_parent"
-                            android:layout_height="0dp"
-                            android:layout_weight="1" />
                     </LinearLayout>
                 </androidx.core.widget.NestedScrollView>
 
