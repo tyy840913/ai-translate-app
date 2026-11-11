@@ -168,14 +168,17 @@ object TranslateClient {
             3. Keep names, brands, code, URLs and numbers unchanged unless there is an established translation.
             4. Do not wrap the output in Markdown code fences.
             5. If the source contains multiple languages, translate all of them into the target language (do not leave any part untranslated).
+            6. Do not invent, omit, or add content. Translate what is there, nothing more.
+            7. For proper nouns (people, places, brands) without a canonical translation in the target language, keep the original form.
+            8. Technical terms should use the standard term in the target language's technical vocabulary.
         """.trimIndent()
     }
 
     private fun imageSystemPrompt(target: String, smart: Boolean): String {
         val targetRule = if (smart) {
-            "Determine the main language of the text in the image. If all text is purely in Chinese (no other language), translate into English; otherwise translate into Simplified Chinese."
+            "Determine the main language of the text in the image. If all text is purely in Chinese (no other language), translate into English; otherwise translate into Simplified Chinese. If the image contains mixed languages, translate all parts into the target language."
         } else {
-            "Translate all text in the image into ${Languages.promptName(target)}."
+            "Translate all text in the image into ${Languages.promptName(target)}. If the image contains mixed languages, translate all parts into the target language."
         }
         return """
             You are a professional OCR and translation engine.

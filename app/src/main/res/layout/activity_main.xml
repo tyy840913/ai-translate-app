@@ -143,7 +143,8 @@
                         <FrameLayout
                             android:id="@+id/input_area"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content">
+                            android:layout_height="0dp"
+                            android:layout_weight="40">
 
                             <EditText
                                 android:id="@+id/input_text"
@@ -215,7 +216,8 @@
                         <LinearLayout
                             android:id="@+id/output_area"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
+                            android:layout_height="0dp"
+                            android:layout_weight="60"
                             android:orientation="vertical"
                             android:visibility="gone">
 

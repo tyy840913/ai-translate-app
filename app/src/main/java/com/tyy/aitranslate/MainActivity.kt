@@ -75,6 +75,8 @@ class MainActivity : AppCompatActivity() {
     private var pendingPhotoUri: Uri? = null
     private var photoUri: Uri? = null
     private var photoBase64: String? = null
+    private var viewportHeight = 0
+    private var keyboardHeight = 0
 
     private val cameraLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -191,6 +193,22 @@ class MainActivity : AppCompatActivity() {
         }
         inputText.setOnClickListener {
             scrollInputToCursor()
+        }
+
+        // 监听窗口高度变化，估算键盘高度。
+        // 键盘弹出时 getWindowVisibleDisplayFrame 返回的高度变小，
+        // 用 contentScroll 自身高度与可见区域之差估算键盘高度。
+        contentScroll.viewTreeObserver.addOnGlobalLayoutListener {
+            val rect = android.graphics.Rect()
+            contentScroll.getWindowVisibleDisplayFrame(rect)
+            val visibleHeight = rect.bottom - rect.top
+            if (visibleHeight > 0) {
+                // contentScroll 的 height 在键盘弹出时会被压缩（adjustResize），
+                // 用 window 总高度与 visibleHeight 之差估算键盘高度
+                val windowHeight = contentScroll.rootView?.height ?: 0
+                keyboardHeight = (windowHeight - visibleHeight).coerceAtLeast(0)
+                viewportHeight = visibleHeight
+            }
         }
 
         inputText.addTextChangedListener(object : TextWatcher {
@@ -641,10 +659,15 @@ class MainActivity : AppCompatActivity() {
         val cursorYInEditText = lineBottom + inputText.paddingTop
         val inputAreaTopInScroll = inputArea.top
         val cursorYInScroll = inputAreaTopInScroll + cursorYInEditText
-        val viewportHeight = contentScroll.height
-        if (viewportHeight == 0) return
-        // 把光标行滚动到键盘弹出后可视区的垂直中间位置
-        val targetY = (cursorYInScroll - viewportHeight / 2).coerceAtLeast(0)
+
+        // 键盘弹出时，用估算的键盘高度算可视区高度；未弹出时用当前 viewport。
+        val visibleHeight = if (keyboardHeight > 0) {
+            (contentScroll.height - keyboardHeight).coerceAtLeast(100)
+        } else {
+            contentScroll.height
+        }
+        // 光标定位到键盘上方可视区的 1/3 处（偏上，给下方留空间看后续内容）
+        val targetY = (cursorYInScroll - visibleHeight / 3).coerceAtLeast(0)
         contentScroll.smoothScrollTo(0, targetY)
     }
 
@@ -706,9 +729,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.13"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.14"
         } catch (_: Exception) {
-            "1.3.13"
+            "1.3.14"
         }
     }
 
