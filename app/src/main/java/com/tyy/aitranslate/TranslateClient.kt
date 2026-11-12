@@ -22,17 +22,46 @@ object TranslateClient {
     }
 
     private fun textMessages(text: String, targetName: String, strict: Boolean): JSONArray {
+        // 单词和文本的期望输出不同，直接在 user message 里点明，比让模型自己判断更可靠
+        val modeHint = if (isSingleWord(text)) {
+            "This input is a single word or short term. " +
+                "List ALL major meanings separated by \"；\"."
+        } else {
+            "This input is a sentence or paragraph. " +
+                "Give exactly ONE accurate, context-appropriate translation. " +
+                "Do not list alternatives or add notes."
+        }
         return JSONArray().apply {
             put(message("system", textSystemPrompt(targetName, strict)))
             put(
                 message(
                     "user",
-                    "Translate the text below into $targetName. " +
+                    "Translate the text below into $targetName. $modeHint " +
                         "Output only the translation. Do not repeat or keep the source text.\n\n" +
                         "<text>\n$text\n</text>"
                 )
             )
         }
+    }
+
+    /**
+     * 是否为单个词/短词：无空白、无句读标点，且长度很短
+     * （中文/日文等按 4 个码点，拉丁等按 20 个码点）。
+     */
+    private fun isSingleWord(text: String): Boolean {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return false
+        if (trimmed.any { it.isWhitespace() }) return false
+        if (trimmed.any { it in "。！？.!?，,;；:：、…" }) return false
+        val codePoints = trimmed.codePointCount(0, trimmed.length)
+        var han = 0
+        var index = 0
+        while (index < trimmed.length) {
+            val codePoint = Character.codePointAt(trimmed, index)
+            if (Character.UnicodeScript.of(codePoint) == Character.UnicodeScript.HAN) han++
+            index += Character.charCount(codePoint)
+        }
+        return if (han > 0) codePoints <= 4 else codePoints <= 20
     }
 
     fun translateImage(
@@ -175,7 +204,10 @@ object TranslateClient {
             6. Preserve line breaks, punctuation, numbers, URLs, code, and proper nouns that have no established translation.
             7. Be deterministic: the same input must always produce the same output. Pick the most standard, commonly-used wording and stay consistent.
             8. Never output reasoning, analysis, or commentary. Do not explain typos, ambiguity or word origins outside the translation itself.
-            9. If the source is a single word or a very short phrase with multiple common meanings, list ALL major meanings separated by "；". For full sentences or paragraphs, give only the single most natural translation.
+            9. Single word vs text:
+               - Single word or short term (no spaces, no punctuation): list ALL major meanings separated by "；".
+               - Sentence or paragraph: output exactly ONE translation, the most accurate meaning in context. Never list alternatives, never add notes or parenthetical glosses.
+            10. For sentences and paragraphs, choose the meaning that fits the surrounding context, not the most common dictionary meaning.
 
             Examples:
             English → Simplified Chinese (简体中文): "Good morning, how are you?" → "早上好，你好吗？"
