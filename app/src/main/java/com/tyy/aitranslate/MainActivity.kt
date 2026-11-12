@@ -11,6 +11,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.text.Editable
+import android.text.InputType
 import android.text.TextWatcher
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -21,6 +22,7 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -34,6 +36,8 @@ import androidx.core.widget.NestedScrollView
 import androidx.drawerlayout.widget.DrawerLayout
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import java.io.File
 import java.util.concurrent.Executors
 
@@ -314,6 +318,10 @@ class MainActivity : AppCompatActivity() {
             drawerLayout.closeDrawer(GravityCompat.START)
             startActivity(Intent(this, SettingsActivity::class.java))
         }
+        findViewById<View>(R.id.nav_prompt).setOnClickListener {
+            drawerLayout.closeDrawer(GravityCompat.START)
+            startActivity(Intent(this, PromptSettingsActivity::class.java))
+        }
         findViewById<View>(R.id.nav_history).setOnClickListener {
             drawerLayout.closeDrawer(GravityCompat.START)
             openHistory()
@@ -403,18 +411,69 @@ class MainActivity : AppCompatActivity() {
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.pick_target_language)
             .setItems(labels.toTypedArray()) { _, which ->
-                val value = values[which]
-                targetLang = value
-                Prefs.setTargetLang(this, value)
-                updateTargetViews()
-                when {
-                    photoUri != null -> translatePhoto()
-                    inputText.text.isNotBlank() -> translateNow(false)
-                }
+                applyTarget(values[which])
+            }
+            .setNeutralButton(R.string.custom_target_add) { _, _ ->
+                // 添加自定义语言后直接选中，省一次点击
+                showAddLanguageDialog { name -> applyTarget(name) }
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
     }
+
+    private fun applyTarget(value: String) {
+        targetLang = value
+        Prefs.setTargetLang(this, value)
+        updateTargetViews()
+        when {
+            photoUri != null -> translatePhoto()
+            inputText.text.isNotBlank() -> translateNow(false)
+        }
+    }
+
+    private fun showAddLanguageDialog(onAdded: (String) -> Unit) {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+        }
+        val layout = TextInputLayout(this).apply {
+            hint = getString(R.string.custom_target_add_hint)
+            boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
+        }
+        val input = TextInputEditText(this).apply {
+            inputType = InputType.TYPE_CLASS_TEXT
+            maxLines = 1
+        }
+        layout.addView(input)
+        container.addView(layout)
+
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.custom_target_add_title)
+            .setView(container)
+            .setPositiveButton(R.string.custom_target_add, null)
+            .setNegativeButton(R.string.cancel, null)
+            .create()
+
+        dialog.setOnShowListener {
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val name = input.text?.toString()?.trim().orEmpty()
+                if (name.isEmpty()) {
+                    layout.error = getString(R.string.custom_target_invalid)
+                    return@setOnClickListener
+                }
+                if (!Prefs.addCustomTarget(this, name)) {
+                    layout.error = getString(R.string.custom_target_duplicate)
+                    return@setOnClickListener
+                }
+                toast(getString(R.string.custom_target_added, name))
+                dialog.dismiss()
+                onAdded(name)
+            }
+        }
+        dialog.show()
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private fun translateNow(fromButton: Boolean) {
         handler.removeCallbacks(translateRunnable)
@@ -811,9 +870,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.32"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.33"
         } catch (_: Exception) {
-            "1.3.32"
+            "1.3.33"
         }
     }
 
