@@ -122,6 +122,8 @@
     <string name="prompt_reset">恢复默认</string>
     <string name="prompt_reset_message">确定恢复内置默认提示词吗？当前修改将丢失。</string>
     <string name="prompt_saved">提示词已保存</string>
+    <string name="image_no_text">图片中未识别到文字</string>
+    <string name="invalid_target">目标语言无效，请检查提示词中的 {{TARGET}} 占位符</string>
     <string name="prompt_settings">翻译提示词</string>
     <string name="prompt_settings_info">文本翻译和图片翻译各有一套提示词。不修改时使用内置默认提示词，点击任意一项可编辑或恢复默认。</string>
 </resources>

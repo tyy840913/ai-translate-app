@@ -628,13 +628,19 @@ class MainActivity : AppCompatActivity() {
                 if (seq != requestSeq || isFinishing || isDestroyed) return@post
                 val translated = result.getOrNull()
                 if (!translated.isNullOrBlank()) {
-                    showResult(translated, displayTarget)
+                    // 新提示词的兜底输出是机器标记，转成本地化文案再显示
+                    val display = when (translated.trim()) {
+                        Prompts.NO_TEXT_MARK -> getString(R.string.image_no_text)
+                        Prompts.INVALID_TARGET_MARK -> getString(R.string.invalid_target)
+                        else -> translated
+                    }
+                    showResult(display, displayTarget)
                     Prefs.addHistory(
                         this,
                         Languages.AUTO,
                         target,
                         getString(R.string.image_translation),
-                        translated,
+                        display,
                         image = true
                     )
                 } else {
@@ -908,9 +914,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.35"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.36"
         } catch (_: Exception) {
-            "1.3.35"
+            "1.3.36"
         }
     }
 
