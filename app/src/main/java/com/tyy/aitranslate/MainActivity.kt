@@ -15,6 +15,7 @@ import android.text.InputType
 import android.text.TextWatcher
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.ViewConfiguration
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -82,6 +83,8 @@ class MainActivity : AppCompatActivity() {
     private var photoUri: Uri? = null
     private var photoBase64: String? = null
     private var lastViewportHeight = 0
+    private var scrollTouchDownX = 0f
+    private var scrollTouchDownY = 0f
     private var keyboardVisible = false
 
     private val cameraLauncher =
@@ -183,16 +186,31 @@ class MainActivity : AppCompatActivity() {
         updateTargetViews()
         showIdle()
 
-        // 无译文时，整个卡片区域（包括 NestedScrollView 的空白部分）都能弹键盘。
+        // 无译文时，点击卡片空白区域（包括 NestedScrollView 的空白部分）弹键盘。
         // 有译文后，只保留 input_text 自己的点击行为。
+        // 注意：滑动结束同样是 ACTION_UP，必须用移动距离区分「点击」和「滑动」，
+        // 否则滚动译文松手就会误弹键盘（翻译中 hasTranslation 仍为 false，最明显）。
         contentScroll.setOnTouchListener { _, event ->
-            if (event.action == MotionEvent.ACTION_UP && !hasTranslation) {
-                inputText.requestFocus()
-                inputText.postDelayed({
-                    val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                    imm.showSoftInput(inputText, InputMethodManager.SHOW_IMPLICIT)
-                }, 50)
-                return@setOnTouchListener true
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    scrollTouchDownX = event.x
+                    scrollTouchDownY = event.y
+                }
+                MotionEvent.ACTION_UP -> {
+                    val dx = event.x - scrollTouchDownX
+                    val dy = event.y - scrollTouchDownY
+                    val slop = ViewConfiguration.get(this).scaledTouchSlop
+                    val isTap = dx * dx + dy * dy <= slop * slop
+                    if (isTap && !hasTranslation) {
+                        inputText.requestFocus()
+                        inputText.postDelayed({
+                            val imm =
+                                getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                            imm.showSoftInput(inputText, InputMethodManager.SHOW_IMPLICIT)
+                        }, 50)
+                        return@setOnTouchListener true
+                    }
+                }
             }
             false
         }
@@ -890,9 +908,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.34"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.35"
         } catch (_: Exception) {
-            "1.3.34"
+            "1.3.35"
         }
     }
 
