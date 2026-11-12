@@ -1,7 +1,10 @@
 package com.tyy.aitranslate
 
+import android.content.Intent
 import android.os.Bundle
+import android.text.InputType
 import android.view.View
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -39,6 +42,16 @@ class SettingsActivity : AppCompatActivity() {
             showEditDialog(null)
         }
 
+        findViewById<View>(R.id.row_custom_langs).setOnClickListener {
+            showLanguageManager()
+        }
+        findViewById<View>(R.id.row_prompt_text).setOnClickListener {
+            openPrompt(image = false)
+        }
+        findViewById<View>(R.id.row_prompt_image).setOnClickListener {
+            openPrompt(image = true)
+        }
+
         reload()
     }
 
@@ -51,7 +64,118 @@ class SettingsActivity : AppCompatActivity() {
         val profiles = Prefs.profiles(this)
         adapter.submit(profiles, Prefs.activeId(this))
         emptyView.visibility = if (profiles.isEmpty()) View.VISIBLE else View.GONE
+        refreshSettings()
     }
+
+    private fun refreshSettings() {
+        val count = Prefs.customTargets(this).size
+        findViewById<TextView>(R.id.setting_langs_summary).text =
+            if (count == 0) {
+                getString(R.string.custom_target_summary_none)
+            } else {
+                getString(R.string.custom_target_summary_count, count)
+            }
+        findViewById<TextView>(R.id.setting_prompt_text_summary).text =
+            if (Prefs.promptText(this).isBlank()) {
+                getString(R.string.prompt_summary_default)
+            } else {
+                getString(R.string.prompt_summary_custom)
+            }
+        findViewById<TextView>(R.id.setting_prompt_image_summary).text =
+            if (Prefs.promptImage(this).isBlank()) {
+                getString(R.string.prompt_summary_default)
+            } else {
+                getString(R.string.prompt_summary_custom)
+            }
+    }
+
+    private fun showLanguageManager() {
+        val custom = Prefs.customTargets(this)
+        if (custom.isEmpty()) {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.custom_target_title)
+                .setMessage(R.string.custom_target_empty)
+                .setPositiveButton(R.string.custom_target_add) { _, _ ->
+                    showAddLanguageDialog()
+                }
+                .setNegativeButton(R.string.cancel, null)
+                .show()
+            return
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.custom_target_title)
+            .setItems(custom.toTypedArray()) { _, which ->
+                confirmRemoveTarget(custom[which])
+            }
+            .setPositiveButton(R.string.custom_target_add) { _, _ ->
+                showAddLanguageDialog()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun confirmRemoveTarget(name: String) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.custom_target_delete_title)
+            .setMessage(getString(R.string.custom_target_delete_message, name))
+            .setPositiveButton(R.string.delete) { _, _ ->
+                Prefs.removeCustomTarget(this, name)
+                refreshSettings()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun showAddLanguageDialog() {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+        }
+        val layout = TextInputLayout(this).apply {
+            hint = getString(R.string.custom_target_add_hint)
+            boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
+        }
+        val input = TextInputEditText(this).apply {
+            inputType = InputType.TYPE_CLASS_TEXT
+            maxLines = 1
+        }
+        layout.addView(input)
+        container.addView(layout)
+
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.custom_target_add_title)
+            .setView(container)
+            .setPositiveButton(R.string.custom_target_add, null)
+            .setNegativeButton(R.string.cancel, null)
+            .create()
+
+        dialog.setOnShowListener {
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val name = input.text?.toString()?.trim().orEmpty()
+                if (name.isEmpty()) {
+                    layout.error = getString(R.string.custom_target_invalid)
+                    return@setOnClickListener
+                }
+                if (!Prefs.addCustomTarget(this, name)) {
+                    layout.error = getString(R.string.custom_target_duplicate)
+                    return@setOnClickListener
+                }
+                refreshSettings()
+                toast(getString(R.string.custom_target_added, name))
+                dialog.dismiss()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun openPrompt(image: Boolean) {
+        startActivity(
+            Intent(this, PromptActivity::class.java)
+                .putExtra(PromptActivity.EXTRA_IMAGE, image)
+        )
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private fun showProfileMenu(profile: ApiProfile) {
         MaterialAlertDialogBuilder(this)

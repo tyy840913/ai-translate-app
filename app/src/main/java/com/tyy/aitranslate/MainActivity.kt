@@ -97,7 +97,8 @@ class MainActivity : AppCompatActivity() {
             val output = data.getStringExtra(HistoryActivity.EXTRA_OUTPUT).orEmpty()
             val isImage = data.getBooleanExtra(HistoryActivity.EXTRA_IMAGE, false)
             val restoredTarget = Languages.normalizeTarget(
-                data.getStringExtra(HistoryActivity.EXTRA_TARGET)
+                data.getStringExtra(HistoryActivity.EXTRA_TARGET),
+                Prefs.customTargets(this)
             )
 
             clearPhotoState()
@@ -132,7 +133,11 @@ class MainActivity : AppCompatActivity() {
             // 如果历史译文正好符合智能模式的默认目标，保持「智能」不变。
             targetLang =
                 if (targetLang == Languages.SMART &&
-                    restoredTarget == Languages.resolveTarget(input, Languages.SMART)
+                    restoredTarget == Languages.resolveTarget(
+                        input,
+                        Languages.SMART,
+                        Prefs.customTargets(this)
+                    )
                 ) {
                     Languages.SMART
                 } else {
@@ -340,13 +345,20 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateApiBanner()
+        // 设置页可能删除了自定义语言，重新校验当前选择
+        val restoredTarget = Prefs.targetLang(this)
+        if (restoredTarget != targetLang) {
+            targetLang = restoredTarget
+            updateTargetViews()
+        }
         if (Prefs.profiles(this).isEmpty()) return
         when {
             photoUri != null && !hasTranslation -> {
                 handler.removeCallbacks(translateRunnable)
                 handler.postDelayed({ translatePhoto() }, 300)
             }
-            inputText.text.isNotBlank() && !hasTranslation -> {
+            // 键盘仍然可见时不自动翻译，避免从后台回来时覆盖用户正在编辑的内容
+            inputText.text.isNotBlank() && !hasTranslation && !keyboardVisible -> {
                 handler.removeCallbacks(translateRunnable)
                 handler.postDelayed(translateRunnable, 300)
             }
@@ -375,14 +387,15 @@ class MainActivity : AppCompatActivity() {
                 if (targetLang == Languages.SMART) getString(R.string.smart_target) else targetLang
             else -> {
                 val text = inputText.text.toString()
-                if (text.isBlank()) targetLang else Languages.resolveTarget(text, targetLang)
+                if (text.isBlank()) targetLang
+                else Languages.resolveTarget(text, targetLang, Prefs.customTargets(this))
             }
         }
         outputLang.text = getString(R.string.to_lang, shownTarget)
     }
 
     private fun pickTargetLanguage() {
-        val values = Languages.target
+        val values = Prefs.targetLanguages(this)
         val labels = values.map {
             if (it == Languages.SMART) getString(R.string.smart_target_recommended) else it
         }
@@ -426,11 +439,16 @@ class MainActivity : AppCompatActivity() {
         }
 
         val seq = ++requestSeq
-        val requestTarget = Languages.resolveTarget(text, targetLang)
+        val requestTarget = Languages.resolveTarget(
+            text,
+            targetLang,
+            Prefs.customTargets(this)
+        )
+        val prompt = Prefs.promptText(this)
         showLoading(requestTarget)
 
         executor.execute {
-            val result = TranslateClient.translate(profile, text, requestTarget)
+            val result = TranslateClient.translate(profile, text, requestTarget, prompt)
             handler.post {
                 if (seq != requestSeq || isFinishing || isDestroyed) return@post
                 val translated = result.getOrNull()
@@ -463,7 +481,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         val smart = targetLang == Languages.SMART
-        val requestTarget = if (smart) Languages.SMART else Languages.normalizeTarget(targetLang)
+        val requestTarget = if (smart) Languages.SMART
+        else Languages.normalizeTarget(targetLang, Prefs.customTargets(this))
+        val prompt = Prefs.promptImage(this)
         val displayTarget =
             if (smart) getString(R.string.smart_target) else requestTarget
         val seq = ++requestSeq
@@ -471,7 +491,15 @@ class MainActivity : AppCompatActivity() {
 
         val cached = photoBase64
         if (cached != null) {
-            requestPhotoTranslation(profile, cached, requestTarget, smart, displayTarget, seq)
+            requestPhotoTranslation(
+                profile,
+                cached,
+                requestTarget,
+                smart,
+                displayTarget,
+                prompt,
+                seq
+            )
             return
         }
 
@@ -497,6 +525,7 @@ class MainActivity : AppCompatActivity() {
                     requestTarget,
                     smart,
                     displayTarget,
+                    prompt,
                     seq
                 )
             }
@@ -509,10 +538,11 @@ class MainActivity : AppCompatActivity() {
         target: String,
         smart: Boolean,
         displayTarget: String,
+        prompt: String,
         seq: Int
     ) {
         executor.execute {
-            val result = TranslateClient.translateImage(profile, base64, target, smart)
+            val result = TranslateClient.translateImage(profile, base64, target, smart, prompt)
             handler.post {
                 if (seq != requestSeq || isFinishing || isDestroyed) return@post
                 val translated = result.getOrNull()
@@ -781,9 +811,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.31"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.32"
         } catch (_: Exception) {
-            "1.3.31"
+            "1.3.32"
         }
     }
 

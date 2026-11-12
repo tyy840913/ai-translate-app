@@ -41,6 +41,18 @@ object Languages {
     val target: List<String> = listOf(SMART) + languages
 
     /**
+     * 内置语言 + 用户自定义语言。自定义语言追加在最后，
+     * 并过滤掉与内置语言/SMART/AUTO 重名的项。
+     */
+    fun targetWith(custom: List<String>): List<String> {
+        val extra = custom
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && it != SMART && it != AUTO && !languages.contains(it) }
+            .distinct()
+        return target + extra
+    }
+
+    /**
      * 给模型看的目标语言名称。中英文都给，减少模型对「中文」等词的歧义。
      */
     private val promptNames: Map<String, String> = mapOf(
@@ -78,8 +90,12 @@ object Languages {
 
     fun promptName(language: String): String = promptNames[language] ?: language
 
-    fun normalizeTarget(value: String?): String {
-        return if (value != null && target.contains(value)) value else SMART
+    /** 目标语言是否使用中日韩文字，用于选择释义之间的分隔符。 */
+    fun isCjkTarget(target: String): Boolean =
+        target == "中文" || target == "繁体中文" || target == "日语" || target == "韩语"
+
+    fun normalizeTarget(value: String?, custom: List<String> = emptyList()): String {
+        return if (value != null && targetWith(custom).contains(value)) value else SMART
     }
 
     /**
@@ -87,8 +103,12 @@ object Languages {
      * 纯中文（只有汉字，无其他语言文字）→ 英语；
      * 其他情况（混合语言、纯外文、含中文夹杂其他语言）→ 中文。
      */
-    fun resolveTarget(text: String, selectedTarget: String): String {
-        if (selectedTarget != SMART) return normalizeTarget(selectedTarget)
+    fun resolveTarget(
+        text: String,
+        selectedTarget: String,
+        custom: List<String> = emptyList()
+    ): String {
+        if (selectedTarget != SMART) return normalizeTarget(selectedTarget, custom)
         return if (isPureChinese(text)) "英语" else "中文"
     }
 

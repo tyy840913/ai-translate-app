@@ -11,28 +11,63 @@ object TranslateClient {
     private const val CONNECT_TIMEOUT = 20_000
     private const val READ_TIMEOUT = 120_000
 
-    fun translate(profile: ApiProfile, text: String, target: String): Result<String> {
+    /** 智能模式（图片）的目标语言描述，替换 {{TARGET}} 用。 */
+    private const val SMART_IMAGE_TARGET =
+        "the automatically determined target language (English if all text is purely Chinese, " +
+            "otherwise Simplified Chinese)"
+
+    fun translate(
+        profile: ApiProfile,
+        text: String,
+        target: String,
+        promptTemplate: String = Prompts.DEFAULT_TEXT
+    ): Result<String> {
         val targetName = Languages.promptName(target)
-        val first = request(profile, textMessages(text, targetName, strict = false))
+        val first = request(
+            profile,
+            textMessages(text, target, targetName, promptTemplate, strict = false)
+        )
         val translated = first.getOrNull() ?: return first
         // 兜底：明显没翻译（如目标中文却全是英文）时，用更强的提示重试一次
         if (!Languages.looksUntranslated(translated, target)) return first
-        val retried = request(profile, textMessages(text, targetName, strict = true))
+        val retried = request(
+            profile,
+            textMessages(text, target, targetName, promptTemplate, strict = true)
+        )
         return retried.getOrNull()?.let { Result.success(it) } ?: first
     }
 
-    private fun textMessages(text: String, targetName: String, strict: Boolean): JSONArray {
+    private fun textMessages(
+        text: String,
+        target: String,
+        targetName: String,
+        promptTemplate: String,
+        strict: Boolean
+    ): JSONArray {
         // 单词和文本的期望输出不同，直接在 user message 里点明，比让模型自己判断更可靠
+        val separator = if (Languages.isCjkTarget(target)) "；" else "; "
         val modeHint = if (isSingleWord(text)) {
             "This input is a single word or short term. " +
-                "List ALL major meanings separated by \"；\"."
+                "List ALL major meanings separated by \"$separator\"."
         } else {
             "This input is a sentence or paragraph. " +
                 "Give exactly ONE accurate, context-appropriate translation. " +
                 "Do not list alternatives or add notes."
         }
+        var system = Prompts.apply(
+            promptTemplate.ifBlank { Prompts.DEFAULT_TEXT },
+            targetName
+        )
+        if (system.isBlank()) {
+            system = Prompts.apply(Prompts.DEFAULT_TEXT, targetName)
+        }
+        if (strict) {
+            system += "\n\n" +
+                "CRITICAL: Your previous answer was not in $targetName. This is forbidden. " +
+                "Rewrite the entire translation in $targetName. Do not answer in the source language."
+        }
         return JSONArray().apply {
-            put(message("system", textSystemPrompt(targetName, strict)))
+            put(message("system", system))
             put(
                 message(
                     "user",
@@ -45,8 +80,9 @@ object TranslateClient {
     }
 
     /**
-     * 是否为单个词/短词：无空白、无句读标点，且长度很短
-     * （中文/日文等按 4 个码点，拉丁等按 20 个码点）。
+     * 是否为单个词/短词：无空白、无句读标点，且长度很短。
+     * 中文等多字节语言收得更紧（2 个码点），避免把「人工智能」这类术语
+     * 误判成多义词而输出一堆释义；拉丁等按 20 个码点。
      */
     private fun isSingleWord(text: String): Boolean {
         val trimmed = text.trim()
@@ -61,15 +97,24 @@ object TranslateClient {
             if (Character.UnicodeScript.of(codePoint) == Character.UnicodeScript.HAN) han++
             index += Character.charCount(codePoint)
         }
-        return if (han > 0) codePoints <= 4 else codePoints <= 20
+        return if (han > 0) codePoints <= 2 else codePoints <= 20
     }
 
     fun translateImage(
         profile: ApiProfile,
         imageBase64: String,
         target: String,
-        smart: Boolean
+        smart: Boolean,
+        promptTemplate: String = Prompts.DEFAULT_IMAGE
     ): Result<String> {
+        val targetDesc = if (smart) SMART_IMAGE_TARGET else Languages.promptName(target)
+        var system = Prompts.apply(
+            promptTemplate.ifBlank { Prompts.DEFAULT_IMAGE },
+            targetDesc
+        )
+        if (system.isBlank()) {
+            system = Prompts.apply(Prompts.DEFAULT_IMAGE, targetDesc)
+        }
         val content = JSONArray().apply {
             put(
                 JSONObject()
@@ -86,7 +131,7 @@ object TranslateClient {
             )
         }
         val messages = JSONArray().apply {
-            put(message("system", imageSystemPrompt(target, smart)))
+            put(message("system", system))
             put(JSONObject().put("role", "user").put("content", content))
         }
         return request(profile, messages)
@@ -97,6 +142,21 @@ object TranslateClient {
     }
 
     private fun request(profile: ApiProfile, messages: JSONArray): Result<String> {
+        val first = execute(profile, messages, extras = true)
+        val error = first.exceptionOrNull()
+        // 部分 OpenAI 兼容服务不认 reasoning_effort / chat_template_kwargs，
+        // 会直接返回 400；去掉扩展字段后重试一次，提高兼容性。
+        if (error is IOException && error.message?.startsWith("HTTP 400") == true) {
+            return execute(profile, messages, extras = false)
+        }
+        return first
+    }
+
+    private fun execute(
+        profile: ApiProfile,
+        messages: JSONArray,
+        extras: Boolean
+    ): Result<String> {
         return try {
             if (profile.baseUrl.isBlank()) {
                 return Result.failure(IOException("请先在设置中填写接口地址"))
@@ -110,9 +170,11 @@ object TranslateClient {
                 put("model", profile.model.trim())
                 put("stream", false)
                 put("temperature", 0.1)
-                put("reasoning_effort", "none")
-                // GLM / Qwen3 系列认 chat_template_kwargs.enable_thinking；OpenAI 系列忽略该字段，无副作用
-                put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
+                if (extras) {
+                    put("reasoning_effort", "none")
+                    // GLM / Qwen3 系列认 chat_template_kwargs.enable_thinking；OpenAI 系列忽略该字段
+                    put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
+                }
                 put("messages", messages)
             }
 
@@ -163,7 +225,12 @@ object TranslateClient {
             if (content.isNullOrBlank()) {
                 Result.failure(IOException("接口返回为空，请确认模型名称支持 Chat Completions"))
             } else {
-                Result.success(clean(content))
+                val cleaned = clean(content)
+                if (cleaned.isBlank()) {
+                    Result.failure(IOException("模型返回内容为空，请重试或检查自定义提示词"))
+                } else {
+                    Result.success(cleaned)
+                }
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -187,53 +254,6 @@ object TranslateClient {
         } else {
             "$value/chat/completions"
         }
-    }
-
-    private fun textSystemPrompt(targetName: String, strict: Boolean): String {
-        val base = """
-            You are a deterministic translation engine. Translate the user's text into the TARGET LANGUAGE below.
-
-            TARGET LANGUAGE: $targetName
-
-            Hard rules:
-            1. The entire output MUST be written in $targetName, except for names, code, URLs and numbers.
-            2. Never return the whole source text unchanged when it is written in a different language.
-            3. If part of the source is ALREADY in $targetName, keep that part unchanged. Translate only the parts written in other languages. Do not rephrase, polish or rewrite content that is already in $targetName.
-            4. If the source mixes multiple languages, translate every non-$targetName part into $targetName.
-            5. Output only the translation. No explanations, labels, quotes, Markdown code fences, or notes.
-            6. Preserve line breaks, punctuation, numbers, URLs, code, and proper nouns that have no established translation.
-            7. Be deterministic: the same input must always produce the same output. Pick the most standard, commonly-used wording and stay consistent.
-            8. Never output reasoning, analysis, or commentary. Do not explain typos, ambiguity or word origins outside the translation itself.
-            9. Single word vs text:
-               - Single word or short term (no spaces, no punctuation): list ALL major meanings separated by "；".
-               - Sentence or paragraph: output exactly ONE translation, the most accurate meaning in context. Never list alternatives, never add notes or parenthetical glosses.
-            10. For sentences and paragraphs, choose the meaning that fits the surrounding context, not the most common dictionary meaning.
-
-            Examples:
-            English → Simplified Chinese (简体中文): "Good morning, how are you?" → "早上好，你好吗？"
-            Simplified Chinese (简体中文) → English: "早上好，你好吗？" → "Good morning, how are you?"
-            Mixed English + Chinese → Simplified Chinese (简体中文): "这个功能 is very useful." → "这个功能 非常有用。"
-            Single word with multiple meanings → Simplified Chinese (简体中文): "bank" → "银行；河岸；堤岸"
-        """.trimIndent()
-        if (!strict) return base
-        return base + "\n\n" +
-            "CRITICAL: Your previous answer was not in $targetName. This is forbidden. " +
-            "Rewrite the entire translation in $targetName. Do not answer in the source language."
-    }
-
-    private fun imageSystemPrompt(target: String, smart: Boolean): String {
-        val targetRule = if (smart) {
-            "Determine the main language of the text in the image. If all text is purely in Chinese (no other language), translate into English; otherwise translate into Simplified Chinese. If the image contains mixed languages, translate all parts into the target language."
-        } else {
-            "Translate all text in the image into ${Languages.promptName(target)}. If the image contains mixed languages, translate all parts into the target language."
-        }
-        return """
-            You are a professional OCR and translation engine.
-            Read all visible text in the image. $targetRule
-            Output only the translation. Do not output the original text, OCR notes, or explanations.
-            Preserve line breaks and punctuation. Keep names, code, URLs and numbers unchanged.
-            Do not use Markdown fences. If there is no readable text, output: 图片中未识别到文字
-        """.trimIndent()
     }
 
     private fun clean(raw: String): String {
@@ -269,7 +289,7 @@ object TranslateClient {
                 text = text.substringAfter('\n', "").trim()
             }
         }
-        // 过滤后为空则回退原文，避免把正常结果误删
-        return text.ifBlank { raw.trim() }
+        // 过滤后为空时返回空串，由调用方按失败处理，避免把思考内容当成译文
+        return text
     }
 }

@@ -11,6 +11,9 @@ object Prefs {
     private const val KEY_HISTORY = "history"
     private const val KEY_TARGET = "target_lang"
     private const val KEY_TARGET_SMART = "target_lang_smart_default"
+    private const val KEY_CUSTOM_TARGETS = "custom_targets"
+    private const val KEY_PROMPT_TEXT = "prompt_text"
+    private const val KEY_PROMPT_IMAGE = "prompt_image"
     private const val MAX_HISTORY = 200
 
     private fun prefs(context: Context) =
@@ -192,7 +195,10 @@ object Prefs {
                 .apply()
             return Languages.SMART
         }
-        return Languages.normalizeTarget(p.getString(KEY_TARGET, Languages.SMART))
+        return Languages.normalizeTarget(
+            p.getString(KEY_TARGET, Languages.SMART),
+            customTargets(context)
+        )
     }
 
     fun setTargetLang(context: Context, value: String) {
@@ -200,5 +206,76 @@ object Prefs {
             .putString(KEY_TARGET, value)
             .putBoolean(KEY_TARGET_SMART, true)
             .apply()
+    }
+
+    // ---------- 自定义目标语言 ----------
+
+    fun customTargets(context: Context): List<String> {
+        val list = mutableListOf<String>()
+        try {
+            val array = JSONArray(prefs(context).getString(KEY_CUSTOM_TARGETS, "[]") ?: "[]")
+            for (i in 0 until array.length()) {
+                val name = array.optString(i).trim()
+                if (name.isNotEmpty()) list.add(name)
+            }
+        } catch (_: Exception) {
+        }
+        return list
+    }
+
+    private fun saveCustomTargets(context: Context, list: List<String>) {
+        val array = JSONArray()
+        for (name in list) array.put(name)
+        prefs(context).edit().putString(KEY_CUSTOM_TARGETS, array.toString()).apply()
+    }
+
+    /** 返回 false 表示名称为空、与内置语言重名或已存在。 */
+    fun addCustomTarget(context: Context, name: String): Boolean {
+        val value = name.trim()
+        if (value.isEmpty() || value == Languages.SMART || value == Languages.AUTO) return false
+        if (Languages.target.contains(value)) return false
+        val list = customTargets(context)
+        if (list.contains(value)) return false
+        saveCustomTargets(context, list + value)
+        return true
+    }
+
+    fun removeCustomTarget(context: Context, name: String) {
+        saveCustomTargets(context, customTargets(context).filterNot { it == name })
+        // 当前选中的就是被删语言时，退回「智能」
+        if (prefs(context).getString(KEY_TARGET, Languages.SMART) == name) {
+            prefs(context).edit().putString(KEY_TARGET, Languages.SMART).apply()
+        }
+    }
+
+    /** 内置 + 自定义，供选择对话框和校验使用。 */
+    fun targetLanguages(context: Context): List<String> =
+        Languages.targetWith(customTargets(context))
+
+    // ---------- 提示词 ----------
+
+    /** 空串表示使用内置默认提示词。 */
+    fun promptText(context: Context): String =
+        prefs(context).getString(KEY_PROMPT_TEXT, "").orEmpty()
+
+    fun setPromptText(context: Context, value: String) {
+        prefs(context).edit()
+            .putString(KEY_PROMPT_TEXT, normalizePrompt(value, Prompts.DEFAULT_TEXT))
+            .apply()
+    }
+
+    fun promptImage(context: Context): String =
+        prefs(context).getString(KEY_PROMPT_IMAGE, "").orEmpty()
+
+    fun setPromptImage(context: Context, value: String) {
+        prefs(context).edit()
+            .putString(KEY_PROMPT_IMAGE, normalizePrompt(value, Prompts.DEFAULT_IMAGE))
+            .apply()
+    }
+
+    /** 与内置默认一致或为空时存空串，表示「使用默认」。 */
+    private fun normalizePrompt(value: String, default: String): String {
+        val body = value.trim()
+        return if (body.isEmpty() || body == default.trim()) "" else value
     }
 }

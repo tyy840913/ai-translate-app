@@ -43,5 +43,10 @@
         <activity
             android:name=".FullscreenActivity"
             android:exported="false" />
+
+        <activity
+            android:name=".PromptActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
     </application>
 </manifest>

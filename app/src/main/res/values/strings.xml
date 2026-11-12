@@ -99,4 +99,27 @@
     <string name="empty_api_subtitle">点击右下角 + 添加一个 OpenAI 兼容接口</string>
     <string name="empty_history_title">还没有翻译记录</string>
     <string name="empty_history_subtitle">翻译成功后会自动保存在这里</string>
+
+    <string name="custom_target_languages">自定义目标语言</string>
+    <string name="custom_target_summary_none">使用内置语言，点击添加</string>
+    <string name="custom_target_summary_count">已添加 %1$d 种，点击管理</string>
+    <string name="custom_target_title">自定义目标语言</string>
+    <string name="custom_target_empty">还没有自定义语言。添加后会出现在主页的目标语言列表里。</string>
+    <string name="custom_target_add">添加</string>
+    <string name="custom_target_add_title">添加目标语言</string>
+    <string name="custom_target_add_hint">语言名称，例如：粤语 / 菲律宾语</string>
+    <string name="custom_target_added">已添加「%1$s」</string>
+    <string name="custom_target_invalid">请输入语言名称</string>
+    <string name="custom_target_duplicate">该语言已存在或与内置语言重名</string>
+    <string name="custom_target_delete_title">删除语言</string>
+    <string name="custom_target_delete_message">确定删除「%1$s」吗？</string>
+
+    <string name="prompt_text_title">文本翻译提示词</string>
+    <string name="prompt_image_title">图片翻译提示词</string>
+    <string name="prompt_summary_default">使用内置默认提示词</string>
+    <string name="prompt_summary_custom">已自定义，点击编辑</string>
+    <string name="prompt_hint">使用 {{TARGET}} 表示目标语言，运行时替换成实际语言名称；删除占位符会自动在开头补一行目标语言。编辑后完全以你的提示词为准，内置提示词不再发送。</string>
+    <string name="prompt_reset">恢复默认</string>
+    <string name="prompt_reset_message">确定恢复内置默认提示词吗？当前修改将丢失。</string>
+    <string name="prompt_saved">提示词已保存</string>
 </resources>
