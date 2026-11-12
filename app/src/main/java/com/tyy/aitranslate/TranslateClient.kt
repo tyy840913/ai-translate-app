@@ -174,11 +174,14 @@ object TranslateClient {
             5. Output only the translation. No explanations, labels, quotes, Markdown code fences, or notes.
             6. Preserve line breaks, punctuation, numbers, URLs, code, and proper nouns that have no established translation.
             7. Be deterministic: the same input must always produce the same output. Pick the most standard, commonly-used wording and stay consistent.
+            8. Never output reasoning, analysis, or commentary. Do not explain typos, ambiguity or word origins outside the translation itself.
+            9. If the source is a single word or a very short phrase with multiple common meanings, list ALL major meanings separated by "；". For full sentences or paragraphs, give only the single most natural translation.
 
             Examples:
             English → Simplified Chinese (简体中文): "Good morning, how are you?" → "早上好，你好吗？"
             Simplified Chinese (简体中文) → English: "早上好，你好吗？" → "Good morning, how are you?"
             Mixed English + Chinese → Simplified Chinese (简体中文): "这个功能 is very useful." → "这个功能 非常有用。"
+            Single word with multiple meanings → Simplified Chinese (简体中文): "bank" → "银行；河岸；堤岸"
         """.trimIndent()
         if (!strict) return base
         return base + "\n\n" +
@@ -203,6 +206,30 @@ object TranslateClient {
 
     private fun clean(raw: String): String {
         var text = raw.trim()
+
+        // 过滤模型思考内容：部分模型无视 enable_thinking=false，仍会输出
+        // 「思考过程 + </think> + 译文」，甚至把思考重复多遍。
+        val closeTags = listOf("</think>", "</thinking>", "</reasoning>", "</thought>")
+        var cut = -1
+        for (tag in closeTags) {
+            val index = text.lastIndexOf(tag)
+            if (index >= 0) cut = maxOf(cut, index + tag.length)
+        }
+        if (cut >= 0) {
+            // 取最后一个思考结束标签之后的内容（通常是真正的答案）
+            text = text.substring(cut).trim()
+        } else {
+            // 没有结束标签时，移除成对的思考块
+            text = text.replace(
+                Regex(
+                    "(?is)<(?:think|thinking|reasoning|thought)>" +
+                        ".*?</(?:think|thinking|reasoning|thought)>"
+                ),
+                " "
+            ).trim()
+        }
+
+        // 去掉 Markdown 代码围栏
         if (text.startsWith("```") && text.endsWith("```")) {
             text = text.removePrefix("```").removeSuffix("```").trim()
             val firstLine = text.lineSequence().firstOrNull().orEmpty()
@@ -210,6 +237,7 @@ object TranslateClient {
                 text = text.substringAfter('\n', "").trim()
             }
         }
-        return text.trim()
+        // 过滤后为空则回退原文，避免把正常结果误删
+        return text.ifBlank { raw.trim() }
     }
 }
