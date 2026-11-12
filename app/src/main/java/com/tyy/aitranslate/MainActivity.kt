@@ -781,9 +781,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.26"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.27"
         } catch (_: Exception) {
-            "1.3.26"
+            "1.3.27"
         }
     }
 

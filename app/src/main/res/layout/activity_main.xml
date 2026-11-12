@@ -270,7 +270,8 @@
                                         android:layout_height="48dp"
                                         android:background="?attr/selectableItemBackgroundBorderless"
                                         android:contentDescription="@string/fullscreen"
-                                        android:padding="11dp"
+                                        android:padding="8dp"
+                                        android:scaleType="fitCenter"
                                         android:src="@drawable/ic_fullscreen"
                                         android:tint="@color/text_secondary" />
                                 </LinearLayout>
