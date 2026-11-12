@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -49,3 +49,26 @@ jobs:
           name: AI-Translate-APK
           path: app/build/outputs/apk/release/app-release.apk
           retention-days: 30
+
+      - name: 构建成功后自动发布
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION=$(grep -oP 'versionName\s*=\s*"\K[0-9.]+' app/build.gradle.kts)
+          TAG="v$VERSION"
+          echo "version=$VERSION tag=$TAG"
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "release $TAG 已存在，跳过自动发布"
+            exit 0
+          fi
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --title "AI Translate $TAG" \
+            --notes "自动构建" \
+            --target "${{ github.sha }}"
+          gh release upload "$TAG" \
+            app/build/outputs/apk/release/app-release.apk \
+            --repo "${{ github.repository }}"
+          gh release view "$TAG" --repo "${{ github.repository }}"

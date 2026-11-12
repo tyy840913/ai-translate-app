@@ -12,8 +12,10 @@ import android.os.Looper
 import android.provider.MediaStore
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -198,6 +200,24 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // 键盘上的「完成/换行」键也触发翻译（不同输入法行为不同，三层兜底：
+        // 这里处理 IME_ACTION_* 和产生 KeyEvent 的回车）。
+        inputText.setOnEditorActionListener { _, actionId, event ->
+            val enterDown = event != null &&
+                event.action == KeyEvent.ACTION_DOWN &&
+                (event.keyCode == KeyEvent.KEYCODE_ENTER ||
+                    event.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER)
+            val imeAction = actionId == EditorInfo.IME_ACTION_DONE ||
+                actionId == EditorInfo.IME_ACTION_GO ||
+                actionId == EditorInfo.IME_ACTION_SEND
+            if (enterDown || imeAction) {
+                translateNow(true)
+                true
+            } else {
+                false
+            }
+        }
+
         // 监听 contentScroll 的高度变化，只在 viewport 真正收缩/恢复时做一次定位。
         // 用 contentScroll.height 而非 insets 差值：键盘收起时 viewport 必然变大，
         // 比「windowHeight - visibleHeight」更可靠（后者在某些 ROM 上一拍才归 0）。
@@ -231,6 +251,17 @@ class MainActivity : AppCompatActivity() {
             override fun afterTextChanged(s: Editable?) {
                 val text = s?.toString().orEmpty()
                 if (restoring) return
+                // 部分输入法在 multiline 下把回车作为字符提交（不产生 KeyEvent）：
+                // 键盘可见时视为「回车翻译」，移除该换行并立即请求。
+                if (keyboardVisible && text.endsWith("\n")) {
+                    val trimmed = text.trimEnd('\n')
+                    restoring = true
+                    inputText.setText(trimmed)
+                    inputText.setSelection(trimmed.length)
+                    restoring = false
+                    translateNow(true)
+                    return
+                }
                 if (photoUri != null) {
                     if (text.isBlank()) return
                     clearPhotoState()
@@ -750,9 +781,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.25"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.26"
         } catch (_: Exception) {
-            "1.3.25"
+            "1.3.26"
         }
     }
 
