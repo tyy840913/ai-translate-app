@@ -11,8 +11,8 @@ android {
         applicationId = "com.tyy.aitranslate"
         minSdk = 26
         targetSdk = 34
-        versionCode = 28
-        versionName = "1.3.24"
+        versionCode = 29
+        versionName = "1.3.25"
 
         vectorDrawables {
             useSupportLibrary = true

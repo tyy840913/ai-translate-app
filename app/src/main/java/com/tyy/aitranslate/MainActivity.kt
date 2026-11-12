@@ -38,7 +38,7 @@ import java.util.concurrent.Executors
 class MainActivity : AppCompatActivity() {
 
     private companion object {
-        const val AUTO_DELAY_MS = 900L
+        const val AUTO_DELAY_MS = 300L
     }
 
     private lateinit var drawerLayout: DrawerLayout
@@ -750,9 +750,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.24"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.25"
         } catch (_: Exception) {
-            "1.3.24"
+            "1.3.25"
         }
     }
 
