@@ -75,6 +75,7 @@ class MainActivity : AppCompatActivity() {
     private var photoUri: Uri? = null
     private var photoBase64: String? = null
     private var lastViewportHeight = 0
+    private var keyboardVisible = false
 
     private val cameraLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -209,12 +210,14 @@ class MainActivity : AppCompatActivity() {
             when {
                 // viewport 收缩（键盘弹出）：把光标定位到新的可视区中间
                 newViewport < previous -> {
+                    keyboardVisible = true
                     if (inputText.hasFocus()) {
                         contentScroll.post { scrollInputToCursor() }
                     }
                 }
                 // viewport 恢复（键盘收起）：有译文则重新定位到 1/3 处
                 newViewport > previous -> {
+                    keyboardVisible = false
                     if (hasTranslation) {
                         contentScroll.post { scrollToResult() }
                     }
@@ -244,7 +247,13 @@ class MainActivity : AppCompatActivity() {
                     updateApiBanner()
                     return
                 }
-                handler.postDelayed(translateRunnable, AUTO_DELAY_MS)
+                if (keyboardVisible) {
+                    // 键盘可见说明是手动输入，不自动翻译（省 token），由用户点按钮触发
+                    handler.removeCallbacks(translateRunnable)
+                } else {
+                    // 无键盘时多为粘贴/程序写入，延迟自动翻译
+                    handler.postDelayed(translateRunnable, AUTO_DELAY_MS)
+                }
             }
         })
 
@@ -741,9 +750,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.23"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.24"
         } catch (_: Exception) {
-            "1.3.23"
+            "1.3.24"
         }
     }
 
