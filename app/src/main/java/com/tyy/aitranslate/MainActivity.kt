@@ -56,6 +56,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var outputArea: View
     private lateinit var divider: View
     private lateinit var contentScroll: NestedScrollView
+    private lateinit var scrollContent: LinearLayout
     private lateinit var progress: ProgressBar
     private lateinit var targetValue: TextView
     private lateinit var apiBanner: MaterialCardView
@@ -165,6 +166,7 @@ class MainActivity : AppCompatActivity() {
         outputArea = findViewById(R.id.output_area)
         divider = findViewById(R.id.divider)
         contentScroll = findViewById(R.id.content_scroll)
+        scrollContent = findViewById(R.id.scroll_content)
         progress = findViewById(R.id.translate_progress)
         targetValue = findViewById(R.id.target_lang_value)
         apiBanner = findViewById(R.id.api_banner)
@@ -247,7 +249,9 @@ class MainActivity : AppCompatActivity() {
                 // viewport 恢复（键盘收起）：有译文则重新定位到 1/3 处
                 newViewport > previous -> {
                     keyboardVisible = false
-                    if (hasTranslation) {
+                    // 只要译文区可见就重滚：翻译进行中（「正在翻译…」）还没出结果时
+                    // hasTranslation 仍为 false，长输入同样会把 loading 挤到屏幕下方。
+                    if (outputArea.visibility == View.VISIBLE) {
                         contentScroll.post { scrollToResult() }
                     }
                 }
@@ -739,6 +743,7 @@ class MainActivity : AppCompatActivity() {
         outputError.visibility = View.GONE
         outputText.text = ""
         setActionsEnabled(false)
+        scrollContent.setPadding(0, 0, 0, 0)
         contentScroll.smoothScrollTo(0, 0)
         updateTargetViews()
     }
@@ -787,12 +792,27 @@ class MainActivity : AppCompatActivity() {
         contentScroll.post {
             // 译文占 viewport 下方 2/3：把分隔线定位到 viewport 的 1/3 处，
             // 上方 1/3 保留输入内容尾部，下方 2/3 显示译文。
-            // 输入内容不足 1/3 屏时 targetY 为负，clamp 到 0 不滚动，
-            // 此时分隔线天然在屏幕上部，译文实际占比更大，仍然可见。
             val viewportHeight = contentScroll.height
             if (viewportHeight == 0) return@post
-            val targetY = (divider.top - viewportHeight / 3f).toInt().coerceAtLeast(0)
-            contentScroll.smoothScrollTo(0, targetY)
+
+            // 输入很长、译文区很短时，内容总高度不足以把分隔线滚到 1/3 处，
+            // smoothScrollTo 会被 clamp 到底部，译文仍贴在屏幕最下面。
+            // 在内容底部补空白（最多补到「分隔线能到 1/3」所需的距离），
+            // 保证目标位置可达；译文比 2/3 屏长时不补，避免底部出现多余空白。
+            val outputHeight = if (outputArea.height > 0) {
+                outputArea.height
+            } else {
+                outputArea.minimumHeight
+            }
+            val paddingBottom = ((viewportHeight * 2f / 3f).toInt() - outputHeight)
+                .coerceAtLeast(0)
+            scrollContent.setPadding(0, 0, 0, paddingBottom)
+
+            // 等补白后的布局生效再滚，否则 maxScroll 仍按旧高度计算
+            scrollContent.post {
+                val targetY = (divider.top - viewportHeight / 3f).toInt().coerceAtLeast(0)
+                contentScroll.smoothScrollTo(0, targetY)
+            }
         }
     }
 
@@ -870,9 +890,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.33"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.34"
         } catch (_: Exception) {
-            "1.3.33"
+            "1.3.34"
         }
     }
 
