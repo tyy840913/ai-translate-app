@@ -13,17 +13,26 @@ object TranslateClient {
 
     fun translate(profile: ApiProfile, text: String, target: String): Result<String> {
         val targetName = Languages.promptName(target)
-        val messages = JSONArray().apply {
-            put(message("system", textSystemPrompt()))
+        val first = request(profile, textMessages(text, targetName, strict = false))
+        val translated = first.getOrNull() ?: return first
+        // 兜底：明显没翻译（如目标中文却全是英文）时，用更强的提示重试一次
+        if (!Languages.looksUntranslated(translated, target)) return first
+        val retried = request(profile, textMessages(text, targetName, strict = true))
+        return retried.getOrNull()?.let { Result.success(it) } ?: first
+    }
+
+    private fun textMessages(text: String, targetName: String, strict: Boolean): JSONArray {
+        return JSONArray().apply {
+            put(message("system", textSystemPrompt(targetName, strict)))
             put(
                 message(
                     "user",
                     "Translate the text below into $targetName. " +
-                        "Output only the translation.\n\n<text>\n$text\n</text>"
+                        "Output only the translation. Do not repeat or keep the source text.\n\n" +
+                        "<text>\n$text\n</text>"
                 )
             )
         }
-        return request(profile, messages)
     }
 
     fun translateImage(
@@ -151,27 +160,30 @@ object TranslateClient {
         }
     }
 
-    private fun textSystemPrompt(): String {
-        return """
-            You are a professional translation engine with deterministic output.
-            The user's text may be in any language or a mixture of multiple languages. Detect the source language(s) automatically, then translate everything into the target language given in the user message.
+    private fun textSystemPrompt(targetName: String, strict: Boolean): String {
+        val base = """
+            You are a deterministic translation engine. Translate the user's text into the TARGET LANGUAGE below.
 
-            Consistency rules (critical):
-            - For the same input, always produce the same translation. Do not vary word choice between calls.
-            - Use the most standard, widely-accepted translation for each word/phrase. Prefer dictionary-standard usage over creative alternatives.
-            - For proper nouns, technical terms, and common vocabulary, use the established canonical translation (e.g. "computer" → 计算机/电脑, not 电脑/计算机/微机 — pick one and stay consistent).
-            - Avoid synonyms when a direct equivalent exists. If a word has multiple accepted translations, always pick the most common one.
+            TARGET LANGUAGE: $targetName
 
-            Accuracy requirements:
-            1. Output only the translated text. No explanations, labels, quotes, or extra text.
-            2. Preserve the original line breaks, punctuation and paragraph structure.
-            3. Keep names, brands, code, URLs and numbers unchanged unless there is an established translation.
-            4. Do not wrap the output in Markdown code fences.
-            5. If the source contains multiple languages, translate all of them into the target language (do not leave any part untranslated).
-            6. Do not invent, omit, or add content. Translate what is there, nothing more.
-            7. For proper nouns (people, places, brands) without a canonical translation in the target language, keep the original form.
-            8. Technical terms should use the standard term in the target language's technical vocabulary.
+            Hard rules:
+            1. The entire output MUST be written in $targetName, except for names, code, URLs and numbers.
+            2. Never return the whole source text unchanged when it is written in a different language.
+            3. If part of the source is ALREADY in $targetName, keep that part unchanged. Translate only the parts written in other languages. Do not rephrase, polish or rewrite content that is already in $targetName.
+            4. If the source mixes multiple languages, translate every non-$targetName part into $targetName.
+            5. Output only the translation. No explanations, labels, quotes, Markdown code fences, or notes.
+            6. Preserve line breaks, punctuation, numbers, URLs, code, and proper nouns that have no established translation.
+            7. Be deterministic: the same input must always produce the same output. Pick the most standard, commonly-used wording and stay consistent.
+
+            Examples:
+            English → Simplified Chinese (简体中文): "Good morning, how are you?" → "早上好，你好吗？"
+            Simplified Chinese (简体中文) → English: "早上好，你好吗？" → "Good morning, how are you?"
+            Mixed English + Chinese → Simplified Chinese (简体中文): "这个功能 is very useful." → "这个功能 非常有用。"
         """.trimIndent()
+        if (!strict) return base
+        return base + "\n\n" +
+            "CRITICAL: Your previous answer was not in $targetName. This is forbidden. " +
+            "Rewrite the entire translation in $targetName. Do not answer in the source language."
     }
 
     private fun imageSystemPrompt(target: String, smart: Boolean): String {

@@ -113,6 +113,32 @@ object Languages {
         return han > 0 && other == 0
     }
 
+    /**
+     * 粗略判断译文是否「没有翻译」（整段仍是源语言）。
+     * 只对中文/英语这两个有明确文字系统的目标做检测；其他语种不做判断。
+     * 混合文本（既有汉字又有拉丁字母）视为已翻译，不重试。
+     */
+    fun looksUntranslated(text: String, target: String): Boolean {
+        var han = 0
+        var latin = 0
+        var index = 0
+        while (index < text.length) {
+            val codePoint = Character.codePointAt(text, index)
+            when {
+                isHan(codePoint) -> han++
+                isLatin(codePoint) -> latin++
+            }
+            index += Character.charCount(codePoint)
+        }
+        return when (target) {
+            // 目标是中文，却一个汉字都没有、只有拉丁字母 → 没翻译
+            "中文", "繁体中文" -> latin > 0 && han == 0
+            // 目标是英文，却一个拉丁字母都没有、只有汉字 → 没翻译
+            "英语" -> han > 0 && latin == 0
+            else -> false
+        }
+    }
+
     private fun isHan(codePoint: Int): Boolean {
         return codePoint in 0x3400..0x4DBF ||
             codePoint in 0x4E00..0x9FFF ||
