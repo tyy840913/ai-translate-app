@@ -97,9 +97,6 @@ class MainActivity : AppCompatActivity() {
     // 收起键盘后的全屏视口高：键盘态定位用它预留收起后的滚动上限，
     // 防止收起键盘时 scrollY 超限被系统强制回弹
     private var fullViewportHeight = 0
-    // 键盘弹出期间内容停留的滚动位置（程序定位/动画/用户手动滚动都实时更新），
-    // 收起键盘时强制写回，钉住内容不被系统顶走
-    private var keyboardScrollY = 0
     private var scrollTouchDownX = 0f
     private var scrollTouchDownY = 0f
     private var keyboardVisible = false
@@ -337,27 +334,21 @@ class MainActivity : AppCompatActivity() {
                         contentScroll.post { scrollInputToCursor() }
                     }
                 }
-                // viewport 恢复（键盘收起）：内容钉在键盘态停留的位置。
-                // 系统在窗口 resize 时可能自行调整滚动（焦点保持等），
-                // 不猜机制、直接对抗：layout 后立刻写回记录的位置，
-                // 谁最后写谁说了算，渲染出来必然是键盘态的原位。
+                // viewport 恢复（键盘收起）：有译文/翻译中则滚动到固定位置
+                // （分隔线定位全屏视口 1/3 处，译文占下方 2/3，完整可见）。
+                // 试过收起后保持原位，但系统在窗口 resize 时会自行调整滚动，
+                // 长文本下译文仍会被顶出可视区；改为直接定位最直观稳定。
                 newViewport > previous -> {
                     keyboardVisible = false
                     // 记录全屏视口高（App 启动后首次 layout 也会走到这里完成初始化）
                     fullViewportHeight = newViewport
-                    if (keyboardScrollY > 0) {
-                        val maxScroll =
-                            (scrollContent.height - newViewport).coerceAtLeast(0)
-                        contentScroll.scrollTo(0, keyboardScrollY.coerceAtMost(maxScroll))
+                    // 只要译文区可见就滚：翻译进行中（「正在翻译…」）还没出结果时
+                    // 同样需要，长输入会把 loading 挤到屏幕下方。
+                    if (outputArea.visibility == View.VISIBLE) {
+                        contentScroll.post { scrollToResult() }
                     }
                 }
             }
-        }
-
-        // 键盘弹出期间持续记录内容停留位置（程序定位动画/用户手动滚动都会回调），
-        // 收起键盘时用它把内容钉回原位
-        contentScroll.setOnScrollChangeListener { _, _, scrollY, _, _ ->
-            if (keyboardVisible) keyboardScrollY = scrollY
         }
 
         inputText.addTextChangedListener(object : TextWatcher {
@@ -1361,9 +1352,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.13"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.14"
         } catch (_: Exception) {
-            "2.3.13"
+            "2.3.14"
         }
     }
 
