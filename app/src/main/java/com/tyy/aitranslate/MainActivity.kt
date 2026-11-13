@@ -1207,7 +1207,8 @@ class MainActivity : AppCompatActivity() {
         // 键盘弹出时 viewport 被压缩：把分隔线定位到可视区下方 1/4 处，
         // 保证「翻译中」/译文开头可见、输入尾部（含光标行）占上 3/4；
         // 输入较短（分隔线本来就在屏内）时公式自动归零不滚，输入不会被顶出去。
-        // 收起键盘后内容保持原位（onGlobalLayout 恢复分支不再回滚）。
+        // 3/4 位置若深过「收起后的滚动上限」就提前底部补白撑大上限，
+        // 收起键盘零回弹、内容保持原位。
         if (keyboardVisible) {
             contentScroll.post {
                 val viewportHeight = contentScroll.height
@@ -1215,22 +1216,30 @@ class MainActivity : AppCompatActivity() {
                 val targetY = (divider.top - viewportHeight * 3f / 4f)
                     .toInt()
                     .coerceAtLeast(0)
-                // 3/4 定位若滚得比「收起键盘后的上限」更深：收起时视口恢复、
-                // 上限收紧，系统会强制回弹——内容突兀下跳，分隔线/译文区被
-                // 顶离原位（"收起原位不动"落空）。键盘态就守住这个上限，
-                // 收起时 scrollY 仍合法，内容真正纹丝不动。
-                val fullMax = if (fullViewportHeight > 0) {
-                    (scrollContent.height - fullViewportHeight).coerceAtLeast(0)
-                } else {
-                    targetY
+                // 3/4 定位可能超过「收起键盘后的滚动上限」（收起时视口恢复、
+                // 上限收紧），超限会被系统强制回弹——内容突兀下跳、译文区被
+                // 顶离原位；但直接卡住上限又会把「翻译中」挤出键盘上方的
+                // 可见区（翻译中分隔线下只有一行 loading，几乎必然超限）。
+                // 解法：提前给内容底部补白把上限撑大——newPadding =
+                // 全屏视口 + targetY - 内容实际高，与当前 padding 无关、
+                // 天然幂等不累加，译文出来后高度变大时自动收敛变小。
+                // 补白后收起键盘 scrollY 必然合法，零回弹、内容纹丝不动。
+                if (fullViewportHeight > 0) {
+                    val fullMax =
+                        (scrollContent.height - fullViewportHeight).coerceAtLeast(0)
+                    val needed = targetY - fullMax
+                    val newPadding =
+                        (scrollContent.paddingBottom + needed).coerceAtLeast(0)
+                    if (newPadding != scrollContent.paddingBottom) {
+                        scrollContent.setPadding(0, 0, 0, newPadding)
+                        // 等补白生效（高度重算）后再滚，否则上限仍按旧高度算
+                        scrollContent.post {
+                            contentScroll.smoothScrollTo(0, targetY)
+                        }
+                        return@post
+                    }
                 }
-                // 译文区比键盘还矮时上限与「翻译中可见」物理上不可兼得：
-                // 优先保证翻译中贴键盘态视口底部可见，回弹幅度压到理论最小。
-                val visibleFloor = (divider.top - viewportHeight).coerceAtLeast(0)
-                contentScroll.smoothScrollTo(
-                    0,
-                    minOf(targetY, fullMax).coerceAtLeast(visibleFloor)
-                )
+                contentScroll.smoothScrollTo(0, targetY)
             }
             return
         }
@@ -1274,19 +1283,7 @@ class MainActivity : AppCompatActivity() {
         val viewportHeight = contentScroll.height
         if (viewportHeight == 0) return
         val targetY = (cursorYInScroll - viewportHeight / 2).coerceAtLeast(0)
-        // 与 scrollToResult 同理：光标居中若滚过「收起键盘后的上限」，
-        // 收起时系统强制回弹、内容突兀下跳。键盘态就守住上限；
-        // 光标行太深、上限容不下时，至少让光标行贴键盘态视口底部可见。
-        val fullMax = if (fullViewportHeight > 0) {
-            (scrollContent.height - fullViewportHeight).coerceAtLeast(0)
-        } else {
-            targetY
-        }
-        val visibleFloor = (cursorYInScroll - viewportHeight).coerceAtLeast(0)
-        contentScroll.smoothScrollTo(
-            0,
-            minOf(targetY, fullMax).coerceAtLeast(visibleFloor)
-        )
+        contentScroll.smoothScrollTo(0, targetY)
     }
 
     private fun copyTranslation() {
@@ -1347,9 +1344,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.11"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.12"
         } catch (_: Exception) {
-            "2.3.11"
+            "2.3.12"
         }
     }
 
