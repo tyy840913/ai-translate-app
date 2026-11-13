@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Android 11+ 包可见性：不声明这个，queryIntentServices 查不到任何 TTS 引擎，
+         导致装的第三方 TTS 引擎永远无法被轮询到（官方文档要求的声明） -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
