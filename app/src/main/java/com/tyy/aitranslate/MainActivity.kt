@@ -7,7 +7,9 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.media.AudioManager
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
@@ -534,6 +536,18 @@ class MainActivity : AppCompatActivity() {
         ttsReady = status == TextToSpeech.SUCCESS
         if (ttsReady) {
             ttsTriedEngines.clear()
+            // speak() 排队成功不代表一定出声：引擎运行期失败只有进度回调能抓到，
+            // 记下诊断码，下次不可用弹窗里能看到
+            tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) = Unit
+                override fun onDone(utteranceId: String?) = Unit
+                override fun onError(utteranceId: String?) {
+                    lastTtsError = "utterance pkg=${ttsEnginePackage ?: "default"}"
+                }
+                override fun onError(utteranceId: String?, errorCode: Int) {
+                    lastTtsError = "utterance=$errorCode pkg=${ttsEnginePackage ?: "default"}"
+                }
+            })
             pendingSpeak?.let { text ->
                 pendingSpeak = null
                 doSpeak(text)
@@ -610,22 +624,41 @@ class MainActivity : AppCompatActivity() {
         val result = engine.setLanguage(locale)
         if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
             // 引擎在但缺语音数据（常见：只有中文没有英文），说清楚缺哪种；
-            // 换一个已装引擎再试，全不行才弹引导
-            lastTtsError = "setLanguage=$result pkg=${engine.javaClass}"
+            // 换一个已装引擎自动重试，全不行才弹引导
+            lastTtsError = "setLanguage=$result pkg=${ttsEnginePackage ?: "default"}"
             val langName = if (locale == Locale.SIMPLIFIED_CHINESE) "中文" else "英文"
             toast(getString(R.string.tts_lang_missing, langName))
-            val next = installedTtsEngines()
-                .map { it.packageName }
-                .firstOrNull { it != ttsEnginePackage && it !in ttsTriedEngines }
-            if (next != null) {
-                ttsTriedEngines.add(ttsEnginePackage ?: "default")
-                initTts(next)
-            } else {
-                showTtsUnavailable()
-            }
+            retryWithNextEngine(text)
             return
         }
-        engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "translation")
+        // 引擎一切正常但媒体音量是 0：不会报错就是无声，提前提醒别误以为 App 坏了
+        val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        if (audio.getStreamVolume(AudioManager.STREAM_MUSIC) == 0) {
+            toast(getString(R.string.tts_volume_zero))
+        }
+        val spoken = engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "translation")
+        if (spoken == TextToSpeech.ERROR) {
+            // init/setLanguage 都成功但 speak 被拒（引擎服务僵死等）：
+            // 原来这里直接静默无声，现在记诊断码并换引擎自动重试
+            lastTtsError = "speak=-1 pkg=${ttsEnginePackage ?: "default"}"
+            retryWithNextEngine(text)
+            return
+        }
+    }
+
+    /** 换下一个没试过的引擎重连；重连成功后自动接着播 text，全试完弹引导 */
+    private fun retryWithNextEngine(text: String) {
+        ttsTriedEngines.add(ttsEnginePackage ?: "default")
+        val next = installedTtsEngines()
+            .map { it.packageName }
+            .firstOrNull { it !in ttsTriedEngines }
+        if (next == null) {
+            ttsFailed = true
+            showTtsUnavailable()
+            return
+        }
+        pendingSpeak = text
+        initTts(next)
     }
 
     private fun showTtsUnavailable() {
@@ -1243,9 +1276,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.3"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.4"
         } catch (_: Exception) {
-            "2.3.3"
+            "2.3.4"
         }
     }
 
