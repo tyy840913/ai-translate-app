@@ -1204,6 +1204,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun scrollToResult() {
+        // 键盘弹出时 viewport 被压缩，1/3 定位会把输入区顶出屏幕：
+        // 改为保持输入光标行可见（译文排在输入下方，部分可能被键盘挡住，
+        // 收起键盘后 onGlobalLayout 里的 viewport 恢复分支会自动滚回 1/3 处）。
+        if (keyboardVisible) {
+            scrollInputToCursor()
+            return
+        }
         contentScroll.post {
             // 译文占 viewport 下方 2/3：把分隔线定位到 viewport 的 1/3 处，
             // 上方 1/3 保留输入内容尾部，下方 2/3 显示译文。
@@ -1305,9 +1312,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.7"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.8"
         } catch (_: Exception) {
-            "2.3.7"
+            "2.3.8"
         }
     }
 
