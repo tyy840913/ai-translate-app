@@ -94,6 +94,9 @@ class MainActivity : AppCompatActivity() {
     private var photoUri: Uri? = null
     private var photoBase64: String? = null
     private var lastViewportHeight = 0
+    // 收起键盘后的全屏视口高：键盘态定位用它预留收起后的滚动上限，
+    // 防止收起键盘时 scrollY 超限被系统强制回弹
+    private var fullViewportHeight = 0
     private var scrollTouchDownX = 0f
     private var scrollTouchDownY = 0f
     private var keyboardVisible = false
@@ -334,6 +337,8 @@ class MainActivity : AppCompatActivity() {
                 // viewport 恢复（键盘收起）：内容保持原位，不做任何滚动调整
                 newViewport > previous -> {
                     keyboardVisible = false
+                    // 记录全屏视口高（App 启动后首次 layout 也会走到这里完成初始化）
+                    fullViewportHeight = newViewport
                 }
             }
         }
@@ -1210,7 +1215,22 @@ class MainActivity : AppCompatActivity() {
                 val targetY = (divider.top - viewportHeight * 3f / 4f)
                     .toInt()
                     .coerceAtLeast(0)
-                contentScroll.smoothScrollTo(0, targetY)
+                // 3/4 定位若滚得比「收起键盘后的上限」更深：收起时视口恢复、
+                // 上限收紧，系统会强制回弹——内容突兀下跳，分隔线/译文区被
+                // 顶离原位（"收起原位不动"落空）。键盘态就守住这个上限，
+                // 收起时 scrollY 仍合法，内容真正纹丝不动。
+                val fullMax = if (fullViewportHeight > 0) {
+                    (scrollContent.height - fullViewportHeight).coerceAtLeast(0)
+                } else {
+                    targetY
+                }
+                // 译文区比键盘还矮时上限与「翻译中可见」物理上不可兼得：
+                // 优先保证翻译中贴键盘态视口底部可见，回弹幅度压到理论最小。
+                val visibleFloor = (divider.top - viewportHeight).coerceAtLeast(0)
+                contentScroll.smoothScrollTo(
+                    0,
+                    minOf(targetY, fullMax).coerceAtLeast(visibleFloor)
+                )
             }
             return
         }
@@ -1254,7 +1274,19 @@ class MainActivity : AppCompatActivity() {
         val viewportHeight = contentScroll.height
         if (viewportHeight == 0) return
         val targetY = (cursorYInScroll - viewportHeight / 2).coerceAtLeast(0)
-        contentScroll.smoothScrollTo(0, targetY)
+        // 与 scrollToResult 同理：光标居中若滚过「收起键盘后的上限」，
+        // 收起时系统强制回弹、内容突兀下跳。键盘态就守住上限；
+        // 光标行太深、上限容不下时，至少让光标行贴键盘态视口底部可见。
+        val fullMax = if (fullViewportHeight > 0) {
+            (scrollContent.height - fullViewportHeight).coerceAtLeast(0)
+        } else {
+            targetY
+        }
+        val visibleFloor = (cursorYInScroll - viewportHeight).coerceAtLeast(0)
+        contentScroll.smoothScrollTo(
+            0,
+            minOf(targetY, fullMax).coerceAtLeast(visibleFloor)
+        )
     }
 
     private fun copyTranslation() {
@@ -1315,9 +1347,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.10"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.11"
         } catch (_: Exception) {
-            "2.3.10"
+            "2.3.11"
         }
     }
 
