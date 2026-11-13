@@ -228,18 +228,7 @@ class MainActivity : AppCompatActivity() {
         btnRetry = findViewById(R.id.btn_retry)
         clipboardBanner = findViewById(R.id.clipboard_banner)
         clipboardPreview = findViewById(R.id.clipboard_preview)
-        // 朗读引擎异步初始化，完成前点朗读只提示
-        // 朗读引擎异步初始化：失败标记不可用；就绪后自动补播刚才点的朗读
-        tts = TextToSpeech(this) { status ->
-            ttsReady = status == TextToSpeech.SUCCESS
-            ttsFailed = !ttsReady
-            if (ttsReady) {
-                pendingSpeak?.let { text ->
-                    pendingSpeak = null
-                    doSpeak(text)
-                }
-            }
-        }
+        initTts()
         scrollContent = findViewById(R.id.scroll_content)
         progress = findViewById(R.id.translate_progress)
         targetValue = findViewById(R.id.target_lang_value)
@@ -450,6 +439,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (ttsFailed) reinitTts()
         updateApiBanner()
         // 设置页可能删除了自定义语言，重新校验当前选择
         val restoredTarget = Prefs.targetLang(this)
@@ -522,6 +512,29 @@ class MainActivity : AppCompatActivity() {
         translateNow(false)
     }
 
+    private fun initTts() {
+        // 朗读引擎异步初始化：失败标记不可用；就绪后自动补播刚才点的朗读
+        tts = TextToSpeech(this) { status ->
+            ttsReady = status == TextToSpeech.SUCCESS
+            ttsFailed = !ttsReady
+            if (ttsReady) {
+                pendingSpeak?.let { text ->
+                    pendingSpeak = null
+                    doSpeak(text)
+                }
+            }
+        }
+    }
+
+    private fun reinitTts() {
+        // 从系统设置启用/更换引擎后回到前台：失败状态重连一次
+        tts?.shutdown()
+        tts = null
+        ttsReady = false
+        ttsFailed = false
+        initTts()
+    }
+
     private fun speakTranslation() {
         val text = outputText.text.toString().trim()
         if (text.isBlank()) return
@@ -552,7 +565,9 @@ class MainActivity : AppCompatActivity() {
             }
         val result = engine.setLanguage(locale)
         if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-            // 引擎在但缺语音数据（常见：只装了英文没有中文），同样引导去设置
+            // 引擎在但缺语音数据（常见：只有中文没有英文），说清楚缺哪种
+            val langName = if (locale == Locale.SIMPLIFIED_CHINESE) "中文" else "英文"
+            toast(getString(R.string.tts_lang_missing, langName))
             showTtsUnavailable()
             return
         }
@@ -560,12 +575,34 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showTtsUnavailable() {
+        // 列出本机引擎清单，一眼看出设备有没有引擎、装了哪些
+        val engines = tts?.engines.orEmpty()
+            .mapNotNull { info -> info.label?.toString()?.takeIf { it.isNotBlank() } ?: info.name }
+            .filter { it.isNotBlank() }
+            .distinct()
+        val message = if (engines.isEmpty()) {
+            getString(R.string.tts_no_engines_message)
+        } else {
+            getString(R.string.tts_engines_message, engines.joinToString("、"))
+        }
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.tts_unavailable_title)
-            .setMessage(R.string.tts_unavailable_message)
+            .setMessage(message)
             .setPositiveButton(R.string.tts_open_settings) { _, _ -> openTtsSettings() }
+            .setNeutralButton(R.string.tts_market) { _, _ -> openMarketForTts() }
             .setNegativeButton(R.string.cancel, null)
             .show()
+    }
+
+    private fun openMarketForTts() {
+        // 没有引擎时引导去应用市场装一个（国内 ROM 均支持 market 协议）
+        try {
+            startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse("market://search?q=文字转语音 TTS"))
+            )
+        } catch (_: Exception) {
+            toast(getString(R.string.tts_market_failed))
+        }
     }
 
     private fun openTtsSettings() {
@@ -1150,9 +1187,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.1"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.2"
         } catch (_: Exception) {
-            "2.3.1"
+            "2.3.2"
         }
     }
 
