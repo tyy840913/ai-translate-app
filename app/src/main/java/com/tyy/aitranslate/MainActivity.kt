@@ -97,6 +97,9 @@ class MainActivity : AppCompatActivity() {
     private var ttsReady = false
     private var ttsFailed = false
     private var pendingSpeak: String? = null
+    private var ttsEnginePackage: String? = null
+    private var ttsTriedEngines = mutableSetOf<String>()
+    private var lastTtsError = ""
     private var lastClipboardPrompt = ""
 
     private val cameraLauncher =
@@ -512,27 +515,68 @@ class MainActivity : AppCompatActivity() {
         translateNow(false)
     }
 
-    private fun initTts() {
-        // 朗读引擎异步初始化：失败标记不可用；就绪后自动补播刚才点的朗读
-        tts = TextToSpeech(this) { status ->
-            ttsReady = status == TextToSpeech.SUCCESS
-            ttsFailed = !ttsReady
-            if (ttsReady) {
-                pendingSpeak?.let { text ->
-                    pendingSpeak = null
-                    doSpeak(text)
-                }
+    private fun initTts(enginePackage: String? = null) {
+        // 朗读引擎异步初始化：失败标记不可用；就绪后自动补播刚才点的朗读。
+        // enginePackage 为空用系统默认引擎；指定的引擎绑定失败时自动换下一个。
+        tts?.shutdown()
+        tts = null
+        ttsReady = false
+        ttsFailed = false
+        ttsEnginePackage = enginePackage
+        tts = if (enginePackage == null) {
+            TextToSpeech(this) { status -> onTtsInit(status) }
+        } else {
+            TextToSpeech(this, { status -> onTtsInit(status) }, enginePackage)
+        }
+    }
+
+    private fun onTtsInit(status: Int) {
+        ttsReady = status == TextToSpeech.SUCCESS
+        if (ttsReady) {
+            ttsTriedEngines.clear()
+            pendingSpeak?.let { text ->
+                pendingSpeak = null
+                doSpeak(text)
             }
+            return
+        }
+        // 默认引擎失败：枚举设备上所有 TTS 引擎逐个试（默认引擎可能没装数据或损坏）
+        lastTtsError = "init status=$status pkg=${ttsEnginePackage ?: "default"}"
+        ttsTriedEngines.add(ttsEnginePackage ?: "default")
+        val next = installedTtsEngines()
+            .map { it.packageName }
+            .firstOrNull { it !in ttsTriedEngines }
+        if (next != null) {
+            initTts(next)
+        } else {
+            ttsFailed = true
         }
     }
 
     private fun reinitTts() {
         // 从系统设置启用/更换引擎后回到前台：失败状态重连一次
-        tts?.shutdown()
-        tts = null
-        ttsReady = false
-        ttsFailed = false
-        initTts()
+        ttsTriedEngines.clear()
+        initTts(ttsEnginePackage?.takeIf { it !in ttsTriedEngines })
+    }
+
+    /** 设备上所有已安装的 TTS 引擎（不依赖当前 TTS 连接状态） */
+    private fun installedTtsEngines(): List<EngineLabel> {
+        val intent = Intent(TextToSpeech.Engine.INTENT_ACTION_TTS_SERVICE)
+        return try {
+            packageManager.queryIntentServices(intent, 0)
+                .mapNotNull { info ->
+                    val pkg = info.serviceInfo?.packageName ?: return@mapNotNull null
+                    val label = try {
+                        info.loadLabel(packageManager).toString()
+                    } catch (_: Exception) {
+                        pkg
+                    }
+                    EngineLabel(pkg, label)
+                }
+                .sortedWith(compareByDescending<EngineLabel> { it.packageName == ttsEnginePackage }.thenBy { it.label })
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
     private fun speakTranslation() {
@@ -565,26 +609,35 @@ class MainActivity : AppCompatActivity() {
             }
         val result = engine.setLanguage(locale)
         if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-            // 引擎在但缺语音数据（常见：只有中文没有英文），说清楚缺哪种
+            // 引擎在但缺语音数据（常见：只有中文没有英文），说清楚缺哪种；
+            // 换一个已装引擎再试，全不行才弹引导
+            lastTtsError = "setLanguage=$result pkg=${engine.javaClass}"
             val langName = if (locale == Locale.SIMPLIFIED_CHINESE) "中文" else "英文"
             toast(getString(R.string.tts_lang_missing, langName))
-            showTtsUnavailable()
+            val next = installedTtsEngines()
+                .map { it.packageName }
+                .firstOrNull { it != ttsEnginePackage && it !in ttsTriedEngines }
+            if (next != null) {
+                ttsTriedEngines.add(ttsEnginePackage ?: "default")
+                initTts(next)
+            } else {
+                showTtsUnavailable()
+            }
             return
         }
         engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "translation")
     }
 
     private fun showTtsUnavailable() {
-        // 列出本机引擎清单，一眼看出设备有没有引擎、装了哪些
-        val engines = tts?.engines.orEmpty()
-            .mapNotNull { info -> info.label?.toString()?.takeIf { it.isNotBlank() } ?: info.name }
-            .filter { it.isNotBlank() }
+        // 用 PackageManager 列引擎清单（不依赖 TTS 连接，连不上也能列出设备上的引擎），
+        // 附上失败原因码，方便远程定位
+        val engines = installedTtsEngines()
+            .map { info -> "${info.label}（${info.packageName}）" }
             .distinct()
-        val message = if (engines.isEmpty()) {
-            getString(R.string.tts_no_engines_message)
-        } else {
-            getString(R.string.tts_engines_message, engines.joinToString("、"))
-        }
+        val message = when {
+            engines.isEmpty() -> getString(R.string.tts_no_engines_message)
+            else -> getString(R.string.tts_engines_message, engines.joinToString("\n"))
+        } + if (lastTtsError.isNotBlank()) "\n\n（${lastTtsError}）" else ""
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.tts_unavailable_title)
             .setMessage(message)
@@ -715,6 +768,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    /** TTS 引擎的包名与显示名，用于诊断列表 */
+    private data class EngineLabel(val packageName: String, val label: String)
 
     private fun translateNow(fromButton: Boolean) {
         handler.removeCallbacks(translateRunnable)
@@ -1187,9 +1243,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.2"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.3"
         } catch (_: Exception) {
-            "2.3.2"
+            "2.3.3"
         }
     }
 

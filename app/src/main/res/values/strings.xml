@@ -113,7 +113,7 @@
     <string name="tts_loading">语音引擎启动中，稍后自动朗读</string>
     <string name="tts_unavailable_title">朗读不可用</string>
     <string name="tts_no_engines_message">本机未检测到语音引擎，或引擎未启用。可安装「Google 文字转语音」或「讯飞语记」等引擎 App，装好后在系统「文字转语音」设置里启用，然后回到本页（已启用的话回来会自动重连）。</string>
-    <string name="tts_engines_message">语音引擎不可用或缺语音数据。本机引擎：%1$s。可到系统「文字转语音」设置里检查是否启用，或换一个引擎试试；装新引擎后回到本页会自动重连。</string>
+    <string name="tts_engines_message">语音引擎不可用或缺语音数据。本机引擎：\n%1$s\n可到系统「文字转语音」设置里检查是否启用，或换一个引擎试试；装新引擎后回到本页会自动重连。</string>
     <string name="tts_lang_missing">未安装%1$s语音数据</string>
     <string name="tts_market">去应用市场</string>
     <string name="tts_market_failed">打不开应用市场，请手动搜索安装 TTS 引擎（如 Google 文字转语音、讯飞语记）</string>
