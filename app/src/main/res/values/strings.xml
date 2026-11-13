@@ -24,6 +24,9 @@
     <string name="remove_photo">移除图片</string>
     <string name="photo_read_failed">无法读取图片</string>
     <string name="camera_unavailable">没有可用的相机应用</string>
+    <string name="photo_source_title">翻译图片</string>
+    <string name="photo_from_camera">拍照</string>
+    <string name="photo_from_gallery">从相册选择</string>
     <string name="image_translation">📷 图片翻译</string>
     <string name="image_history_hint">图片翻译记录仅保留译文</string>
     <string name="translating">翻译中…</string>

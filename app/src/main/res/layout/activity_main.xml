@@ -165,7 +165,7 @@
                                     android:lineSpacingExtra="5dp"
                                     android:paddingStart="2dp"
                                     android:paddingTop="2dp"
-                                    android:paddingEnd="34dp"
+                                    android:paddingEnd="2dp"
                                     android:scrollbars="none"
                                     android:textColor="@color/text_primary"
                                     android:textColorHint="@color/text_hint"

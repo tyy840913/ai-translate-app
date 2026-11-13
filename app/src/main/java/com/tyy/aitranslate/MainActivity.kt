@@ -97,6 +97,39 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+    private val galleryLauncher =
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri == null) return@registerForActivityResult
+            // 相册 URI 的读权限只限当次，复制到 cache 后走与拍照一致的 FileProvider 流程，
+            // 保证之后切换目标语言重新翻译时还能读到图片。
+            executor.execute {
+                val dir = File(cacheDir, "images")
+                val file = File(dir, "photo_${System.currentTimeMillis()}.jpg")
+                val ok = dir.isDirectory || dir.mkdirs()
+                val copied = ok && runCatching {
+                    contentResolver.openInputStream(uri)?.use { input ->
+                        file.outputStream().use { input.copyTo(it) }
+                    } != null
+                }.getOrDefault(false)
+                handler.post {
+                    if (isFinishing || isDestroyed) return@post
+                    if (!copied) {
+                        toast(getString(R.string.photo_read_failed))
+                        return@post
+                    }
+                    val cached = runCatching {
+                        FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+                    }.getOrNull()
+                    if (cached == null) {
+                        toast(getString(R.string.photo_read_failed))
+                        return@post
+                    }
+                    showPhoto(cached)
+                    translatePhoto()
+                }
+            }
+        }
+
     private val historyLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode != RESULT_OK) return@registerForActivityResult
@@ -332,7 +365,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnTranslate.setOnClickListener { translateNow(true) }
-        btnCamera.setOnClickListener { takePhoto() }
+        btnCamera.setOnClickListener { choosePhotoSource() }
         btnCopy.setOnClickListener { copyTranslation() }
         btnShare.setOnClickListener { shareTranslation() }
         btnFullscreen.setOnClickListener { openFullscreen() }
@@ -689,6 +722,21 @@ class MainActivity : AppCompatActivity() {
         inputText.visibility = View.VISIBLE
     }
 
+    private fun choosePhotoSource() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.photo_source_title)
+            .setItems(
+                arrayOf(
+                    getString(R.string.photo_from_camera),
+                    getString(R.string.photo_from_gallery)
+                )
+            ) { _, which ->
+                if (which == 0) takePhoto() else galleryLauncher.launch("image/*")
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
     private fun takePhoto() {
         val dir = File(cacheDir, "images")
         if (!dir.exists() && !dir.mkdirs()) {
@@ -930,9 +978,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.39"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.40"
         } catch (_: Exception) {
-            "1.3.39"
+            "1.3.40"
         }
     }
 
