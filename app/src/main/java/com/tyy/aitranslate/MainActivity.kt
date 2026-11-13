@@ -51,6 +51,7 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         const val AUTO_DELAY_MS = 300L
+        const val CLIPBOARD_BANNER_MS = 6000L
     }
 
     private lateinit var drawerLayout: DrawerLayout
@@ -82,6 +83,7 @@ class MainActivity : AppCompatActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private val executor = Executors.newCachedThreadPool()
     private val translateRunnable = Runnable { translateNow(false) }
+    private val hideClipboardBanner = Runnable { clipboardBanner.visibility = View.GONE }
 
     private var targetLang = Languages.SMART
     private var lastOutputTarget = ""
@@ -468,6 +470,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         handler.removeCallbacks(translateRunnable)
+        handler.removeCallbacks(hideClipboardBanner)
         photoPreview.setImageDrawable(null)
         tts?.stop()
         tts?.shutdown()
@@ -503,13 +506,39 @@ class MainActivity : AppCompatActivity() {
         // 输入框已有相同内容、或就是本页刚复制的译文，不再打扰
         if (text == inputText.text.toString().trim()) return
         if (text == outputText.text.toString().trim()) return
+        // 明显不需要翻译的内容（URL、域名、邮箱、纯数字/符号）不打扰
+        if (!worthPrompting(text)) return
         lastClipboardPrompt = text
         clipboardPreview.text = text
         clipboardBanner.visibility = View.VISIBLE
+        // 横幅不再常驻：几秒后自动消失，避免一直挂在界面上
+        handler.removeCallbacks(hideClipboardBanner)
+        handler.postDelayed(hideClipboardBanner, CLIPBOARD_BANNER_MS)
+    }
+
+    /**
+     * 剪贴板内容值得提示翻译吗：
+     * - 没有任何字母/汉字（纯数字、号码、金额、符号、标点）→ 不提示；
+     * - 整段就是一个 URL / 域名 / 邮箱 → 不提示；
+     * - 混合文本里的 URL 不误伤（含其他可译内容，翻译时 URL 本来就保持原样）。
+     */
+    private fun worthPrompting(text: String): Boolean {
+        if (text.none { it.isLetter() }) return false
+        if (text.startsWith("http://", true) ||
+            text.startsWith("https://", true) ||
+            text.startsWith("www.", true)
+        ) return false
+        if (!text.contains(' ') && (
+                text.matches(Regex("[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+")) ||
+                    text.matches(Regex("[\\w-]+(\\.[\\w-]+)+(/[^\\s]*)?"))
+            )
+        ) return false
+        return true
     }
 
     private fun translateClipboard() {
         val text = clipboardPreview.text.toString().trim()
+        handler.removeCallbacks(hideClipboardBanner)
         clipboardBanner.visibility = View.GONE
         if (text.isEmpty()) return
         inputText.setText(text)
@@ -1276,9 +1305,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.6"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.7"
         } catch (_: Exception) {
-            "2.3.6"
+            "2.3.7"
         }
     }
 
