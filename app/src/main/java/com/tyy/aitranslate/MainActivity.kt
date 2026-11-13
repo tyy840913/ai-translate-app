@@ -1204,11 +1204,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun scrollToResult() {
-        // 键盘弹出时 viewport 被压缩，1/3 定位会把输入区顶出屏幕：
-        // 改为保持输入光标行可见（译文排在输入下方，部分可能被键盘挡住，
-        // 收起键盘后 onGlobalLayout 里的 viewport 恢复分支会自动滚回 1/3 处）。
+        // 键盘弹出时 viewport 被压缩：把分隔线定位到可视区下方 1/4 处，
+        // 保证「翻译中」/译文开头可见、输入尾部（含光标行）占上 3/4；
+        // 输入较短（分隔线本来就在屏内）时公式自动归零不滚，输入不会被顶出去。
+        // 收起键盘后 onGlobalLayout 的 viewport 恢复分支会自动滚回 1/3 处。
         if (keyboardVisible) {
-            scrollInputToCursor()
+            contentScroll.post {
+                val viewportHeight = contentScroll.height
+                if (viewportHeight == 0) return@post
+                val targetY = (divider.top - viewportHeight * 3f / 4f)
+                    .toInt()
+                    .coerceAtLeast(0)
+                contentScroll.smoothScrollTo(0, targetY)
+            }
             return
         }
         contentScroll.post {
@@ -1312,9 +1320,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.8"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.9"
         } catch (_: Exception) {
-            "2.3.8"
+            "2.3.9"
         }
     }
 
