@@ -100,12 +100,13 @@ class MainActivity : AppCompatActivity() {
     private val historyLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode != RESULT_OK) return@registerForActivityResult
-            val data = result.data ?: return@registerForActivityResult
-            val input = data.getStringExtra(HistoryActivity.EXTRA_INPUT).orEmpty()
-            val output = data.getStringExtra(HistoryActivity.EXTRA_OUTPUT).orEmpty()
-            val isImage = data.getBooleanExtra(HistoryActivity.EXTRA_IMAGE, false)
+            val entry = HistoryPick.entry ?: return@registerForActivityResult
+            HistoryPick.entry = null
+            val input = entry.input
+            val output = entry.output
+            val isImage = entry.image
             val restoredTarget = Languages.normalizeTarget(
-                data.getStringExtra(HistoryActivity.EXTRA_TARGET),
+                entry.target,
                 Prefs.customTargets(this)
             )
 
@@ -914,9 +915,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.36"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.37"
         } catch (_: Exception) {
-            "1.3.36"
+            "1.3.37"
         }
     }
 

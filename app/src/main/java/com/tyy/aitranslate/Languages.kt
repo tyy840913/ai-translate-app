@@ -183,7 +183,12 @@ object Languages {
     }
 
     private fun isLatin(codePoint: Int): Boolean {
-        return codePoint in 0x0041..0x005A || codePoint in 0x0061..0x007A
+        // ASCII 之外还要认带变音符的拉丁字母（café 的 é、naïve 的 ï）：
+        // Latin-1 Supplement + Extended-A/B（U+00C0..U+024F）、
+        // Latin Extended Additional（U+1E00..U+1EFF，越南语等）。
+        // 只认 ASCII 时「中文é」会被误判成纯中文，智能模式方向译反。
+        return codePoint in 0x0041..0x005A || codePoint in 0x0061..0x007A ||
+            codePoint in 0x00C0..0x024F || codePoint in 0x1E00..0x1EFF
     }
 
     private fun isCyrillic(codePoint: Int): Boolean {

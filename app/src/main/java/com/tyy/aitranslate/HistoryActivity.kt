@@ -1,7 +1,6 @@
 package com.tyy.aitranslate
 
 import android.app.Activity
-import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
@@ -10,14 +9,6 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 class HistoryActivity : AppCompatActivity() {
-
-    companion object {
-        const val EXTRA_INPUT = "input"
-        const val EXTRA_OUTPUT = "output"
-        const val EXTRA_SOURCE = "source"
-        const val EXTRA_TARGET = "target"
-        const val EXTRA_IMAGE = "image"
-    }
 
     private lateinit var adapter: HistoryAdapter
     private lateinit var emptyView: View
@@ -53,14 +44,10 @@ class HistoryActivity : AppCompatActivity() {
     }
 
     private fun open(entry: HistoryEntry) {
-        val data = Intent().apply {
-            putExtra(EXTRA_INPUT, entry.input)
-            putExtra(EXTRA_OUTPUT, entry.output)
-            putExtra(EXTRA_SOURCE, entry.source)
-            putExtra(EXTRA_TARGET, entry.target)
-            putExtra(EXTRA_IMAGE, entry.image)
-        }
-        setResult(Activity.RESULT_OK, data)
+        // 超长译文走 Intent extras 会触发 Binder 大小限制（TransactionTooLargeException），
+        // 与全屏页一致改用进程内单例传递，Intent 只回传结果码。
+        HistoryPick.entry = entry
+        setResult(Activity.RESULT_OK)
         finish()
     }
 
@@ -88,4 +75,9 @@ class HistoryActivity : AppCompatActivity() {
             .setNegativeButton(R.string.cancel, null)
             .show()
     }
+}
+
+/** 历史恢复的进程内传递通道，用完即清。 */
+object HistoryPick {
+    var entry: HistoryEntry? = null
 }
