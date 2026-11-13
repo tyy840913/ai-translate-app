@@ -110,7 +110,11 @@
     <string name="invalid_target">目标语言无效，请检查提示词中的 {{TARGET}} 占位符</string>
     <string name="invalid_word">不是有效单词，请检查拼写</string>
     <string name="speak">朗读</string>
-    <string name="tts_not_ready">语音引擎未就绪，请稍后再试</string>
+    <string name="tts_loading">语音引擎启动中，稍后自动朗读</string>
+    <string name="tts_unavailable_title">朗读不可用</string>
+    <string name="tts_unavailable_message">本机没有可用的语音引擎，或缺少对应语言的语音数据。可到系统「文字转语音（TTS）」设置中安装或启用语音引擎（如「Google 文字转语音」），装好后返回即可朗读。</string>
+    <string name="tts_open_settings">去设置</string>
+    <string name="tts_no_settings">找不到语音设置页面，请在系统设置中搜索「文字转语音」</string>
     <string name="clipboard_banner_title">翻译剪贴板内容</string>
     <string name="retry">重试</string>
     <string name="search_history">搜索历史记录</string>

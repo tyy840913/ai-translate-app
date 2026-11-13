@@ -11,6 +11,7 @@ import android.speech.tts.TextToSpeech
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.provider.Settings
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
@@ -94,6 +95,8 @@ class MainActivity : AppCompatActivity() {
     private var keyboardVisible = false
     private var tts: TextToSpeech? = null
     private var ttsReady = false
+    private var ttsFailed = false
+    private var pendingSpeak: String? = null
     private var lastClipboardPrompt = ""
 
     private val cameraLauncher =
@@ -226,7 +229,17 @@ class MainActivity : AppCompatActivity() {
         clipboardBanner = findViewById(R.id.clipboard_banner)
         clipboardPreview = findViewById(R.id.clipboard_preview)
         // 朗读引擎异步初始化，完成前点朗读只提示
-        tts = TextToSpeech(this) { status -> ttsReady = status == TextToSpeech.SUCCESS }
+        // 朗读引擎异步初始化：失败标记不可用；就绪后自动补播刚才点的朗读
+        tts = TextToSpeech(this) { status ->
+            ttsReady = status == TextToSpeech.SUCCESS
+            ttsFailed = !ttsReady
+            if (ttsReady) {
+                pendingSpeak?.let { text ->
+                    pendingSpeak = null
+                    doSpeak(text)
+                }
+            }
+        }
         scrollContent = findViewById(R.id.scroll_content)
         progress = findViewById(R.id.translate_progress)
         targetValue = findViewById(R.id.target_lang_value)
@@ -464,6 +477,7 @@ class MainActivity : AppCompatActivity() {
         tts?.stop()
         tts?.shutdown()
         tts = null
+        pendingSpeak = null
         executor.shutdownNow()
         super.onDestroy()
     }
@@ -512,10 +526,22 @@ class MainActivity : AppCompatActivity() {
         val text = outputText.text.toString().trim()
         if (text.isBlank()) return
         val engine = tts
-        if (engine == null || !ttsReady) {
-            toast(getString(R.string.tts_not_ready))
+        if (engine == null || ttsFailed) {
+            // 引擎确认不可用（设备没装 TTS 或初始化失败），引导去系统设置
+            showTtsUnavailable()
             return
         }
+        if (!ttsReady) {
+            // 只是还没初始化完：记住这段译文，回调到达后自动播
+            pendingSpeak = text
+            toast(getString(R.string.tts_loading))
+            return
+        }
+        doSpeak(text)
+    }
+
+    private fun doSpeak(text: String) {
+        val engine = tts ?: return
         engine.stop()
         // 按译文内容推断朗读语言：含汉字读中文，其余按英文朗读
         val locale =
@@ -526,10 +552,26 @@ class MainActivity : AppCompatActivity() {
             }
         val result = engine.setLanguage(locale)
         if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-            toast(getString(R.string.tts_not_ready))
+            // 引擎在但缺语音数据（常见：只装了英文没有中文），同样引导去设置
+            showTtsUnavailable()
             return
         }
         engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "translation")
+    }
+
+    private fun showTtsUnavailable() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.tts_unavailable_title)
+            .setMessage(R.string.tts_unavailable_message)
+            .setPositiveButton(R.string.tts_open_settings) { _, _ ->
+                try {
+                    startActivity(Intent(Settings.ACTION_TEXT_TO_SPEECH_SETTINGS))
+                } catch (_: Exception) {
+                    toast(getString(R.string.tts_no_settings))
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     private fun updateApiBanner() {
@@ -1098,9 +1140,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.1"
         } catch (_: Exception) {
-            "2.3"
+            "2.3.1"
         }
     }
 
