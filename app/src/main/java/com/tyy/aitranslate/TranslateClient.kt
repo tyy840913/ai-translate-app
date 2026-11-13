@@ -48,7 +48,10 @@ object TranslateClient {
         val separator = if (Languages.isCjkTarget(target)) "；" else "; "
         val modeHint = if (isSingleWord(text)) {
             "This input is a single word or short term. " +
-                "List ALL major meanings separated by \"$separator\"."
+                "List ALL major meanings separated by \"$separator\". " +
+                "If it is a misspelled or non-existent word (e.g., \"theer\"), do NOT guess meanings: " +
+                "output one line starting with [INVALID_WORD], followed by a short note in $targetName " +
+                "naming the invalid word and the most likely intended word(s)."
         } else {
             "This input is a sentence or paragraph. " +
                 "Give exactly ONE accurate, context-appropriate translation. " +
@@ -185,7 +188,7 @@ object TranslateClient {
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "AITranslate/1.3.38 (Android)")
+                setRequestProperty("User-Agent", "AITranslate/1.3.39 (Android)")
                 if (profile.apiKey.isNotBlank()) {
                     setRequestProperty("Authorization", "Bearer ${profile.apiKey.trim()}")
                 }

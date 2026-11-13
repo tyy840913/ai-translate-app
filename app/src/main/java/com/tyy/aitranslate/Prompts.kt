@@ -15,6 +15,9 @@ object Prompts {
     /** 目标语言无效时的兜底输出标记（用户自定义模板删掉占位符时可能出现），调用方转成本地化文案。 */
     const val INVALID_TARGET_MARK = "[INVALID_TARGET]"
 
+    /** 输入为拼写错误/不存在的单词时的输出标记，模型在该行后跟目标语言的修正建议。 */
+    const val INVALID_WORD_MARK = "[INVALID_WORD]"
+
     /** 文本翻译默认提示词。用户未自定义时使用。 */
     val DEFAULT_TEXT: String = """
         You are a deterministic translation engine. Translate the user's text into {{TARGET}}.
@@ -36,7 +39,9 @@ object Prompts {
         10. Be deterministic: same input and target language always yield the same output. Use the most standard, commonly-used wording.
 
         # Fallback
-        11. If {{TARGET}} is missing or invalid, or the text cannot be translated, return the input unchanged.
+        11. Single-word or short-term input that is clearly a misspelling or a non-word (e.g., "theer"): do NOT guess a meaning and do NOT silently translate the nearest real word. Output exactly ONE line starting with [INVALID_WORD], followed by a short note in {{TARGET}} naming the invalid word and the most likely intended word(s). Example (target = 简体中文): [INVALID_WORD] "theer" 不是有效单词，您想输入的是 "there" 还是 "their"？
+        Apply this only to obviously invalid words. Real words — including proper nouns, brand names, abbreviations, technical or rare terms — are handled by the rules above as usual.
+        12. If {{TARGET}} is missing or invalid, or the text cannot be translated, return the input unchanged.
 
         # Examples (target = 简体中文)
         "Good morning, how are you?" → 早上好，你好吗？

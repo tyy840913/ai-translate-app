@@ -535,13 +535,15 @@ class MainActivity : AppCompatActivity() {
                 if (seq != requestSeq || isFinishing || isDestroyed) return@post
                 val translated = result.getOrNull()
                 if (!translated.isNullOrBlank()) {
-                    showResult(translated, requestTarget)
+                    // 拼写错误的单词：模型输出 [INVALID_WORD] 标记行，剥掉标记只显示修正建议
+                    val display = formatInvalidWord(translated)
+                    showResult(display, requestTarget)
                     Prefs.addHistory(
                         this,
                         Languages.AUTO,
                         requestTarget,
                         text,
-                        translated
+                        display
                     )
                 } else {
                     showErrorText(
@@ -611,6 +613,19 @@ class MainActivity : AppCompatActivity() {
                     seq
                 )
             }
+        }
+    }
+
+    /**
+     * 拼写错误/不存在单词的输出处理：模型返回 [INVALID_WORD] 标记行，
+     * 后跟目标语言的修正建议。剥掉机器标记只显示建议内容；
+     * 模型只回了标记没给内容时，用默认文案兜底。
+     */
+    private fun formatInvalidWord(output: String): String {
+        val trimmed = output.trim()
+        if (!trimmed.startsWith(Prompts.INVALID_WORD_MARK)) return output
+        return trimmed.removePrefix(Prompts.INVALID_WORD_MARK).trim().ifBlank {
+            getString(R.string.invalid_word)
         }
     }
 
@@ -915,9 +930,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.38"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.39"
         } catch (_: Exception) {
-            "1.3.38"
+            "1.3.39"
         }
     }
 
