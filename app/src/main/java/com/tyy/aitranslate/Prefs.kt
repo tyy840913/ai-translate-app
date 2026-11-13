@@ -151,7 +151,8 @@ object Prefs {
             if (newest.input == input &&
                 newest.source == source &&
                 newest.target == target &&
-                newest.image == image
+                newest.image == image &&
+                newest.output == output
             ) {
                 list.removeAt(0)
             }
