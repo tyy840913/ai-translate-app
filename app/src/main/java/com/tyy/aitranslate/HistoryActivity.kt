@@ -2,16 +2,23 @@ package com.tyy.aitranslate
 
 import android.app.Activity
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
+import android.widget.EditText
 import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.snackbar.Snackbar
 
 class HistoryActivity : AppCompatActivity() {
 
     private lateinit var adapter: HistoryAdapter
     private lateinit var emptyView: View
+    private lateinit var searchInput: EditText
+    private var allHistory: List<HistoryEntry> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -21,6 +28,7 @@ class HistoryActivity : AppCompatActivity() {
         findViewById<View>(R.id.btn_clear_all).setOnClickListener { confirmClearAll() }
 
         emptyView = findViewById(R.id.empty_view)
+        searchInput = findViewById(R.id.search_input)
         adapter = HistoryAdapter(
             onOpen = { open(it) },
             onLongPress = { confirmDelete(it) }
@@ -29,6 +37,14 @@ class HistoryActivity : AppCompatActivity() {
             layoutManager = LinearLayoutManager(this@HistoryActivity)
             adapter = this@HistoryActivity.adapter
         }
+        setupSwipeDelete()
+        searchInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                applyFilter(s?.toString().orEmpty())
+            }
+        })
         reload()
     }
 
@@ -38,9 +54,66 @@ class HistoryActivity : AppCompatActivity() {
     }
 
     private fun reload() {
-        val history = Prefs.history(this)
-        adapter.submit(history)
-        emptyView.visibility = if (history.isEmpty()) View.VISIBLE else View.GONE
+        allHistory = Prefs.history(this)
+        // 刷新时保留当前搜索词，避免滑动删除后过滤状态丢失
+        applyFilter(searchInput.text.toString())
+    }
+
+    private fun applyFilter(query: String) {
+        val q = query.trim()
+        val shown = if (q.isEmpty()) {
+            allHistory
+        } else {
+            // 原文和译文都参与匹配，忽略大小写
+            allHistory.filter {
+                it.input.contains(q, ignoreCase = true) ||
+                    it.output.contains(q, ignoreCase = true)
+            }
+        }
+        adapter.submit(shown)
+        emptyView.visibility = if (shown.isEmpty()) View.VISIBLE else View.GONE
+    }
+
+    private fun setupSwipeDelete() {
+        val callback = object : ItemTouchHelper.Callback() {
+            override fun getMovementFlags(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder
+            ): Int = makeMovementFlags(0, ItemTouchHelper.START or ItemTouchHelper.END)
+
+            override fun onMove(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+                target: RecyclerView.ViewHolder
+            ): Boolean = false
+
+            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
+                val position = viewHolder.bindingAdapterPosition
+                if (position == RecyclerView.NO_POSITION) return
+                // 过滤状态下 position 对应的是当前显示列表，按条目 id 删，不会错删
+                val entry = adapter.itemAt(position) ?: return
+                Prefs.deleteHistory(this@HistoryActivity, entry.id)
+                reload()
+                Snackbar.make(
+                    findViewById(R.id.recycler),
+                    getString(R.string.history_deleted),
+                    Snackbar.LENGTH_LONG
+                ).setAction(R.string.undo) {
+                    // 撤销把整条加回去。addHistory 会生成新 id/时间戳并放到列表头，
+                    // 顺序与删除前略有出入，但内容完整。
+                    Prefs.addHistory(
+                        this@HistoryActivity,
+                        entry.source,
+                        entry.target,
+                        entry.input,
+                        entry.output,
+                        entry.image
+                    )
+                    reload()
+                }.show()
+            }
+        }
+        ItemTouchHelper(callback).attachToRecyclerView(findViewById(R.id.recycler))
     }
 
     private fun open(entry: HistoryEntry) {

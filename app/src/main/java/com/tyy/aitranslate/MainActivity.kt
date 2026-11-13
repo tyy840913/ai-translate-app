@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.speech.tts.TextToSpeech
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
@@ -40,6 +41,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
@@ -64,6 +66,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnCopy: ImageButton
     private lateinit var btnShare: ImageButton
     private lateinit var btnFullscreen: ImageButton
+    private lateinit var btnSpeak: ImageButton
+    private lateinit var btnRetry: TextView
+    private lateinit var clipboardBanner: MaterialCardView
+    private lateinit var clipboardPreview: TextView
     private lateinit var btnClear: ImageButton
     private lateinit var btnCamera: ImageButton
     private lateinit var btnTranslate: ImageButton
@@ -86,6 +92,9 @@ class MainActivity : AppCompatActivity() {
     private var scrollTouchDownX = 0f
     private var scrollTouchDownY = 0f
     private var keyboardVisible = false
+    private var tts: TextToSpeech? = null
+    private var ttsReady = false
+    private var lastClipboardPrompt = ""
 
     private val cameraLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -212,6 +221,12 @@ class MainActivity : AppCompatActivity() {
         outputArea = findViewById(R.id.output_area)
         divider = findViewById(R.id.divider)
         contentScroll = findViewById(R.id.content_scroll)
+        btnSpeak = findViewById(R.id.btn_speak)
+        btnRetry = findViewById(R.id.btn_retry)
+        clipboardBanner = findViewById(R.id.clipboard_banner)
+        clipboardPreview = findViewById(R.id.clipboard_preview)
+        // 朗读引擎异步初始化，完成前点朗读只提示
+        tts = TextToSpeech(this) { status -> ttsReady = status == TextToSpeech.SUCCESS }
         scrollContent = findViewById(R.id.scroll_content)
         progress = findViewById(R.id.translate_progress)
         targetValue = findViewById(R.id.target_lang_value)
@@ -378,6 +393,11 @@ class MainActivity : AppCompatActivity() {
         btnCopy.setOnClickListener { copyTranslation() }
         btnShare.setOnClickListener { shareTranslation() }
         btnFullscreen.setOnClickListener { openFullscreen() }
+        btnSpeak.setOnClickListener { speakTranslation() }
+        btnRetry.setOnClickListener {
+            if (photoUri != null) translatePhoto() else translateNow(false)
+        }
+        clipboardBanner.setOnClickListener { translateClipboard() }
 
         findViewById<View>(R.id.nav_api).setOnClickListener {
             drawerLayout.closeDrawer(GravityCompat.START)
@@ -441,8 +461,75 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         handler.removeCallbacks(translateRunnable)
         photoPreview.setImageDrawable(null)
+        tts?.stop()
+        tts?.shutdown()
+        tts = null
         executor.shutdownNow()
         super.onDestroy()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // Android 10+ 只允许有焦点的应用读剪贴板，onResume 时未必拿到焦点，等这里再检测
+        if (hasFocus) checkClipboard()
+    }
+
+    private fun checkClipboard() {
+        // 图片模式不打扰
+        if (photoUri != null) {
+            clipboardBanner.visibility = View.GONE
+            return
+        }
+        val manager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val text = manager.primaryClip
+            ?.takeIf { it.itemCount > 0 }
+            ?.getItemAt(0)
+            ?.coerceToText(this)
+            ?.toString()
+            ?.trim()
+            .orEmpty()
+        // 超长内容不像要翻译的文本；同一内容只提示一次
+        if (text.isEmpty() || text.length > 5000) return
+        if (text == lastClipboardPrompt) return
+        // 输入框已有相同内容、或就是本页刚复制的译文，不再打扰
+        if (text == inputText.text.toString().trim()) return
+        if (text == outputText.text.toString().trim()) return
+        lastClipboardPrompt = text
+        clipboardPreview.text = text
+        clipboardBanner.visibility = View.VISIBLE
+    }
+
+    private fun translateClipboard() {
+        val text = clipboardPreview.text.toString().trim()
+        clipboardBanner.visibility = View.GONE
+        if (text.isEmpty()) return
+        inputText.setText(text)
+        inputText.setSelection(text.length)
+        translateNow(false)
+    }
+
+    private fun speakTranslation() {
+        val text = outputText.text.toString().trim()
+        if (text.isBlank()) return
+        val engine = tts
+        if (engine == null || !ttsReady) {
+            toast(getString(R.string.tts_not_ready))
+            return
+        }
+        engine.stop()
+        // 按译文内容推断朗读语言：含汉字读中文，其余按英文朗读
+        val locale =
+            if (text.any { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.HAN }) {
+                Locale.SIMPLIFIED_CHINESE
+            } else {
+                Locale.US
+            }
+        val result = engine.setLanguage(locale)
+        if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+            toast(getString(R.string.tts_not_ready))
+            return
+        }
+        engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "translation")
     }
 
     private fun updateApiBanner() {
@@ -822,6 +909,7 @@ class MainActivity : AppCompatActivity() {
         outputArea.visibility = View.VISIBLE
         progress.visibility = View.VISIBLE
         outputError.visibility = View.GONE
+        btnRetry.visibility = View.GONE
         outputLang.visibility = View.VISIBLE
         outputLang.text = getString(R.string.to_lang, target)
         outputText.text = getString(R.string.translating)
@@ -841,6 +929,7 @@ class MainActivity : AppCompatActivity() {
         outputText.text = text
         outputText.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
         outputError.visibility = View.GONE
+        btnRetry.visibility = View.GONE
         progress.visibility = View.GONE
         outputLang.visibility = View.VISIBLE
         outputLang.text = getString(R.string.to_lang, target)
@@ -855,6 +944,7 @@ class MainActivity : AppCompatActivity() {
         outputArea.visibility = View.GONE
         progress.visibility = View.GONE
         outputError.visibility = View.GONE
+        btnRetry.visibility = View.GONE
         outputText.text = ""
         setActionsEnabled(false)
         scrollContent.setPadding(0, 0, 0, 0)
@@ -867,6 +957,8 @@ class MainActivity : AppCompatActivity() {
         outputArea.visibility = View.VISIBLE
         outputError.text = message
         outputError.visibility = View.VISIBLE
+        // 失败后给一键重试入口（有图片重译图片，否则重发文本）
+        btnRetry.visibility = View.VISIBLE
         progress.visibility = View.GONE
         setActionsEnabled(hasTranslation)
         if (!hasTranslation) {
@@ -881,9 +973,11 @@ class MainActivity : AppCompatActivity() {
         btnCopy.isEnabled = enabled
         btnShare.isEnabled = enabled
         btnFullscreen.isEnabled = enabled
+        btnSpeak.isEnabled = enabled
         btnCopy.alpha = if (enabled) 1f else 0.35f
         btnShare.alpha = if (enabled) 1f else 0.35f
         btnFullscreen.alpha = if (enabled) 1f else 0.35f
+        btnSpeak.alpha = if (enabled) 1f else 0.35f
     }
 
     private fun openFullscreen() {
@@ -1004,9 +1098,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.2"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3"
         } catch (_: Exception) {
-            "2.2"
+            "2.3"
         }
     }
 

@@ -5,6 +5,9 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.util.TypedValue
+import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
@@ -15,6 +18,10 @@ import androidx.appcompat.app.AppCompatActivity
  * 文本通过进程内单例传递，避免超长译文触发 Intent 的 Binder 大小限制。
  */
 class FullscreenActivity : AppCompatActivity() {
+
+    private var baseTextSize = 0f
+    private var textScale = 1f
+    private lateinit var scaleDetector: ScaleGestureDetector
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,7 +37,26 @@ class FullscreenActivity : AppCompatActivity() {
 
         findViewById<TextView>(R.id.fullscreen_lang).text =
             getString(R.string.to_lang, FullscreenContent.target)
-        findViewById<TextView>(R.id.fullscreen_text).text = FullscreenContent.text
+        val fullscreenText = findViewById<TextView>(R.id.fullscreen_text)
+        fullscreenText.text = FullscreenContent.text
+        baseTextSize = fullscreenText.textSize
+        scaleDetector = ScaleGestureDetector(
+            this,
+            object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                override fun onScale(detector: ScaleGestureDetector): Boolean {
+                    // 双指缩放调节字号，夹在 0.5x~3x 防止极端值
+                    textScale = (textScale * detector.scaleFactor).coerceIn(0.5f, 3f)
+                    fullscreenText.setTextSize(TypedValue.COMPLEX_UNIT_PX, baseTextSize * textScale)
+                    return true
+                }
+            }
+        )
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        // Activity 级拦截保证缩放手势收到完整事件流，透传不干扰文本选择和滚动
+        scaleDetector.onTouchEvent(ev)
+        return super.dispatchTouchEvent(ev)
     }
 
     private fun copyTranslation() {

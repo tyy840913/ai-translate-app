@@ -22,6 +22,9 @@ class HistoryAdapter(
         notifyDataSetChanged()
     }
 
+    /** 当前显示列表（可能是搜索过滤后的），供滑动删除按 position 取条目 */
+    fun itemAt(position: Int): HistoryEntry? = items.getOrNull(position)
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_history, parent, false)
