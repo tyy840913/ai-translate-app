@@ -174,8 +174,13 @@ object TranslateClient {
                 put("stream", false)
                 put("temperature", 0.1)
                 if (extras) {
+                    // 关闭思考模式的三类平台写法，全部带上；不认识多余字段的平台
+                    // 会报 400，request() 会去掉全部扩展字段重试一次兜底。
+                    // thinking.type：GLM/智谱系（文档默认 enabled，必须显式 disabled）
+                    put("thinking", JSONObject().put("type", "disabled"))
+                    // reasoning_effort：OpenAI 系，none = 关闭思考
                     put("reasoning_effort", "none")
-                    // GLM / Qwen3 系列认 chat_template_kwargs.enable_thinking；OpenAI 系列忽略该字段
+                    // chat_template_kwargs.enable_thinking：vLLM / Qwen 系
                     put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
                 }
                 put("messages", messages)
@@ -188,7 +193,7 @@ object TranslateClient {
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "AITranslate/2.1 (Android)")
+                setRequestProperty("User-Agent", "AITranslate/2.2 (Android)")
                 if (profile.apiKey.isNotBlank()) {
                     setRequestProperty("Authorization", "Bearer ${profile.apiKey.trim()}")
                 }
