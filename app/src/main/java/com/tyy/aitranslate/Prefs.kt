@@ -14,8 +14,7 @@ object Prefs {
     private const val KEY_CUSTOM_TARGETS = "custom_targets"
     private const val KEY_PROMPT_TEXT = "prompt_text"
     private const val KEY_PROMPT_IMAGE = "prompt_image"
-    private const val MAX_HISTORY = 200
-    private const val MAX_ENTRY_CHARS = 20_000
+    private const val MAX_HISTORY = 100
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -146,9 +145,6 @@ object Prefs {
         output: String,
         image: Boolean = false
     ) {
-        // 单条超长文本截断，避免 200 条历史把 SharedPreferences 撑爆
-        val input = input.take(MAX_ENTRY_CHARS)
-        val output = output.take(MAX_ENTRY_CHARS)
         val list = history(context)
         if (list.isNotEmpty()) {
             val newest = list[0]

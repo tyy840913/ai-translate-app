@@ -13,15 +13,11 @@
     <string name="about_title">关于 AI 翻译</string>
     <string name="about_message">AI 翻译 v%1$s\n\n只支持 OpenAI 兼容接口（Chat Completions），可添加多个配置并随时切换。\n\n默认智能翻译：输入中文自动翻译成英文，输入其他语言自动翻译成中文；点击左下角的目标语言可手动切换。右下角刷新按钮可重新翻译。\n\n支持拍照翻译：拍摄包含文字的图片，App 会把图片发送给支持视觉能力的模型并显示译文。\n\n输入文字后停顿约 1 秒会自动翻译，字数不设上限。\n\nAPI Key 与历史记录仅保存在本机应用私有目录，不会上传到任何第三方服务器；翻译内容只会发送到你配置的接口。</string>
 
-    <string name="input_label">原文</string>
     <string name="input_hint">输入或粘贴需要翻译的文字…</string>
-    <string name="char_count">%1$d/%2$d</string>
     <string name="clear_input">清空输入</string>
 
-    <string name="translate_to">译成</string>
     <string name="smart_target">智能</string>
     <string name="smart_target_recommended">智能（推荐）</string>
-    <string name="smart_target_hint">智能模式：中文翻译成英文，其他语言翻译成中文。选择具体语言后，固定翻译成该语言。</string>
     <string name="pick_target_language">选择目标语言</string>
     <string name="translate">翻译</string>
     <string name="photo_translate">拍照翻译</string>
@@ -30,12 +26,8 @@
     <string name="camera_unavailable">没有可用的相机应用</string>
     <string name="image_translation">📷 图片翻译</string>
     <string name="image_history_hint">图片翻译记录仅保留译文</string>
-    <string name="translate_now">立即翻译</string>
     <string name="translating">翻译中…</string>
-    <string name="output_label">译文</string>
     <string name="to_lang">→ %1$s</string>
-    <string name="output_placeholder">译文将在这里显示</string>
-    <string name="output_hint">智能翻译：中文→英文，其他语言→中文 · 历史仅保存在本机</string>
     <string name="copy">复制译文</string>
     <string name="share">分享译文</string>
     <string name="fullscreen">全屏显示</string>
@@ -76,13 +68,9 @@
     <string name="add_api">添加接口</string>
     <string name="edit_api">编辑接口</string>
     <string name="api_name">名称</string>
-    <string name="api_name_hint">例如：OpenAI / 中转站</string>
     <string name="base_url">接口地址（Base URL）</string>
-    <string name="base_url_hint">https://api.openai.com/v1</string>
     <string name="api_key">API Key</string>
-    <string name="api_key_hint">sk-…（可留空）</string>
     <string name="model">模型</string>
-    <string name="model_hint">gpt-4o-mini</string>
     <string name="dialog_profile_hint">请求地址会自动补全为 Base URL + /chat/completions；Key 仅保存在本机。</string>
     <string name="please_enter_url">请输入接口地址</string>
     <string name="please_enter_model">请输入模型名称</string>
@@ -100,19 +88,12 @@
     <string name="empty_history_title">还没有翻译记录</string>
     <string name="empty_history_subtitle">翻译成功后会自动保存在这里</string>
 
-    <string name="custom_target_languages">自定义目标语言</string>
-    <string name="custom_target_summary_none">使用内置语言，点击添加</string>
-    <string name="custom_target_summary_count">已添加 %1$d 种，点击管理</string>
-    <string name="custom_target_title">自定义目标语言</string>
-    <string name="custom_target_empty">还没有自定义语言。添加后会出现在主页的目标语言列表里。</string>
     <string name="custom_target_add">添加</string>
     <string name="custom_target_add_title">添加目标语言</string>
     <string name="custom_target_add_hint">语言名称，例如：粤语 / 菲律宾语</string>
     <string name="custom_target_added">已添加「%1$s」</string>
     <string name="custom_target_invalid">请输入语言名称</string>
     <string name="custom_target_duplicate">该语言已存在或与内置语言重名</string>
-    <string name="custom_target_delete_title">删除语言</string>
-    <string name="custom_target_delete_message">确定删除「%1$s」吗？</string>
 
     <string name="prompt_text_title">文本翻译提示词</string>
     <string name="prompt_image_title">图片翻译提示词</string>
