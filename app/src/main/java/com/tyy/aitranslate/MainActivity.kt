@@ -563,15 +563,25 @@ class MainActivity : AppCompatActivity() {
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.tts_unavailable_title)
             .setMessage(R.string.tts_unavailable_message)
-            .setPositiveButton(R.string.tts_open_settings) { _, _ ->
-                try {
-                    startActivity(Intent(Settings.ACTION_TEXT_TO_SPEECH_SETTINGS))
-                } catch (_: Exception) {
-                    toast(getString(R.string.tts_no_settings))
-                }
-            }
+            .setPositiveButton(R.string.tts_open_settings) { _, _ -> openTtsSettings() }
             .setNegativeButton(R.string.cancel, null)
             .show()
+    }
+
+    private fun openTtsSettings() {
+        // 公开 SDK 里没有直达 TTS 设置的官方常量：
+        // 先用广泛支持的系统 action 直达「文字转语音」页，
+        // 失败再退到公开的「语音输入与输出」设置页。
+        try {
+            startActivity(Intent("com.android.settings.TTS_SETTINGS"))
+            return
+        } catch (_: Exception) {
+        }
+        try {
+            startActivity(Intent(Settings.ACTION_VOICE_INPUT_SETTINGS))
+        } catch (_: Exception) {
+            toast(getString(R.string.tts_no_settings))
+        }
     }
 
     private fun updateApiBanner() {
