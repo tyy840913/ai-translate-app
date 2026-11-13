@@ -8,6 +8,7 @@ import android.net.Uri
 import android.util.Base64
 import androidx.exifinterface.media.ExifInterface
 import java.io.ByteArrayOutputStream
+import java.io.File
 import kotlin.math.max
 
 object PhotoUtils {
@@ -20,9 +21,45 @@ object PhotoUtils {
     )
 
     /**
-     * 读取相机图片，按 EXIF 校正方向、缩小到适合模型处理的大小，并编码为 JPEG Base64。
+     * 读取图片，按 EXIF 校正方向、缩小到适合模型处理的大小，并编码为 JPEG Base64。
      */
     fun prepare(context: Context, uri: Uri): PreparedPhoto {
+        val bitmap = decodeScaled(context, uri)
+        val bytes = ByteArrayOutputStream().use {
+            bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it)
+            it.toByteArray()
+        }
+        return PreparedPhoto(
+            preview = bitmap,
+            base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+        )
+    }
+
+    /**
+     * 把任意来源的图片（相册大图、HEIC、相机直出）解码后统一转码为
+     * 最长边 1600px、JPEG 85% 的小文件再落盘：
+     * 几十 MB 的原图也只写几百 KB，既避免超长复制，也防止 cache 膨胀。
+     * 失败返回 false，由调用方回退或提示。
+     */
+    fun processToFile(context: Context, source: Uri, dest: File): Boolean {
+        val bitmap = runCatching { decodeScaled(context, source) }.getOrNull() ?: return false
+        val dirOk = dest.parentFile?.let { it.isDirectory || it.mkdirs() } == true
+        var written = false
+        if (dirOk) {
+            written = runCatching {
+                dest.outputStream().use { out ->
+                    check(bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)) {
+                        "compress failed"
+                    }
+                }
+            }.isSuccess
+        }
+        bitmap.recycle()
+        return written
+    }
+
+    /** 解码 + EXIF 方向校正 + 缩放到 MAX_DIMENSION 以内。 */
+    private fun decodeScaled(context: Context, uri: Uri): Bitmap {
         val resolver = context.contentResolver
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         resolver.openInputStream(uri)?.use {
@@ -90,14 +127,6 @@ object PhotoUtils {
                 true
             )
         }
-
-        val bytes = ByteArrayOutputStream().use {
-            bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it)
-            it.toByteArray()
-        }
-        return PreparedPhoto(
-            preview = bitmap,
-            base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-        )
+        return bitmap
     }
 }

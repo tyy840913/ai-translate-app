@@ -92,43 +92,52 @@ class MainActivity : AppCompatActivity() {
             val uri = pendingPhotoUri
             pendingPhotoUri = null
             if (result.resultCode == RESULT_OK && uri != null) {
-                showPhoto(uri)
-                translatePhoto()
+                processPickedImage(uri, fallback = true)
             }
         }
 
     private val galleryLauncher =
         registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             if (uri == null) return@registerForActivityResult
-            // 相册 URI 的读权限只限当次，复制到 cache 后走与拍照一致的 FileProvider 流程，
-            // 保证之后切换目标语言重新翻译时还能读到图片。
-            executor.execute {
-                val dir = File(cacheDir, "images")
-                val file = File(dir, "photo_${System.currentTimeMillis()}.jpg")
-                val ok = dir.isDirectory || dir.mkdirs()
-                val copied = ok && runCatching {
-                    contentResolver.openInputStream(uri)?.use { input ->
-                        file.outputStream().use { input.copyTo(it) }
-                    } != null
-                }.getOrDefault(false)
-                handler.post {
-                    if (isFinishing || isDestroyed) return@post
-                    if (!copied) {
-                        toast(getString(R.string.photo_read_failed))
-                        return@post
-                    }
-                    val cached = runCatching {
-                        FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            processPickedImage(uri, fallback = false)
+        }
+
+    /**
+     * 拍照/相册统一入口：解码 → EXIF 校正 → 缩到最长边 1600px → JPEG 85% 转码落盘，
+     * 再走 FileProvider。相册几十 MB 的原图/HEIC 也只写几百 KB，避免超长复制与 cache 膨胀。
+     * 相册 URI 的读权限只限当次，转码进 cache 后切换目标语言重译仍可读。
+     * 拍照路径转码失败时回退用相机直出文件（相机已写好，可正常读）；
+     * 相册失败只能提示重选。
+     */
+    private fun processPickedImage(source: Uri, fallback: Boolean) {
+        executor.execute {
+            val processed =
+                File(File(cacheDir, "images"), "photo_${System.currentTimeMillis()}.jpg")
+            val ok = PhotoUtils.processToFile(this, source, processed)
+            if (!ok) processed.delete()
+            handler.post {
+                if (isFinishing || isDestroyed) return@post
+                val target = if (ok) {
+                    runCatching {
+                        FileProvider.getUriForFile(this, "$packageName.fileprovider", processed)
                     }.getOrNull()
-                    if (cached == null) {
-                        toast(getString(R.string.photo_read_failed))
-                        return@post
+                } else {
+                    null
+                }
+                when {
+                    target != null -> {
+                        showPhoto(target)
+                        translatePhoto()
                     }
-                    showPhoto(cached)
-                    translatePhoto()
+                    fallback -> {
+                        showPhoto(source)
+                        translatePhoto()
+                    }
+                    else -> toast(getString(R.string.photo_read_failed))
                 }
             }
         }
+    }
 
     private val historyLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -712,6 +721,23 @@ class MainActivity : AppCompatActivity() {
         restoring = false
         hideKeyboard()
         showIdle()
+        // 每次换图都清一次旧文件，cache/images 只保留当前这张，防止越用越大
+        cleanupOldPhotos(uri)
+    }
+
+    /** 删除 cache/images 下除当前图片外的历史 photo_*.jpg。 */
+    private fun cleanupOldPhotos(keep: Uri) {
+        val keepPath = keep.lastPathSegment ?: return
+        executor.execute {
+            val dir = File(cacheDir, "images")
+            val files = dir.listFiles { f ->
+                f.name.startsWith("photo_") && f.name.endsWith(".jpg")
+            } ?: return@execute
+            val keepFile = File(cacheDir, keepPath)
+            for (f in files) {
+                if (f.absolutePath != keepFile.absolutePath) f.delete()
+            }
+        }
     }
 
     private fun clearPhotoState() {
@@ -978,9 +1004,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.0"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.1"
         } catch (_: Exception) {
-            "2.0"
+            "2.1"
         }
     }
 

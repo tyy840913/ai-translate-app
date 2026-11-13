@@ -188,7 +188,7 @@ object TranslateClient {
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "AITranslate/2.0 (Android)")
+                setRequestProperty("User-Agent", "AITranslate/2.1 (Android)")
                 if (profile.apiKey.isNotBlank()) {
                     setRequestProperty("Authorization", "Bearer ${profile.apiKey.trim()}")
                 }
@@ -288,7 +288,12 @@ object TranslateClient {
         if (text.startsWith("```") && text.endsWith("```")) {
             text = text.removePrefix("```").removeSuffix("```").trim()
             val firstLine = text.lineSequence().firstOrNull().orEmpty()
-            if (firstLine.isNotBlank() && firstLine.length <= 12 && !firstLine.contains(" ")) {
+            // 围栏语言标记只可能是 ASCII 字母数字（json/text/bash…）。
+            // 之前只看「短且无空格」，"你好"、{"a":1} 这类译文首行会被误当成
+            // 语言标记剥掉，导致译文首行丢失甚至整条译文变空。
+            val looksLikeLangTag = firstLine.length in 1..12 &&
+                firstLine.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it in "+-#" }
+            if (looksLikeLangTag) {
                 text = text.substringAfter('\n', "").trim()
             }
         }
