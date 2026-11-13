@@ -331,14 +331,9 @@ class MainActivity : AppCompatActivity() {
                         contentScroll.post { scrollInputToCursor() }
                     }
                 }
-                // viewport 恢复（键盘收起）：有译文则重新定位到 1/3 处
+                // viewport 恢复（键盘收起）：内容保持原位，不做任何滚动调整
                 newViewport > previous -> {
                     keyboardVisible = false
-                    // 只要译文区可见就重滚：翻译进行中（「正在翻译…」）还没出结果时
-                    // hasTranslation 仍为 false，长输入同样会把 loading 挤到屏幕下方。
-                    if (outputArea.visibility == View.VISIBLE) {
-                        contentScroll.post { scrollToResult() }
-                    }
                 }
             }
         }
@@ -1207,7 +1202,7 @@ class MainActivity : AppCompatActivity() {
         // 键盘弹出时 viewport 被压缩：把分隔线定位到可视区下方 1/4 处，
         // 保证「翻译中」/译文开头可见、输入尾部（含光标行）占上 3/4；
         // 输入较短（分隔线本来就在屏内）时公式自动归零不滚，输入不会被顶出去。
-        // 收起键盘后 onGlobalLayout 的 viewport 恢复分支会自动滚回 1/3 处。
+        // 收起键盘后内容保持原位（onGlobalLayout 恢复分支不再回滚）。
         if (keyboardVisible) {
             contentScroll.post {
                 val viewportHeight = contentScroll.height
@@ -1320,9 +1315,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.9"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.10"
         } catch (_: Exception) {
-            "2.3.9"
+            "2.3.10"
         }
     }
 
