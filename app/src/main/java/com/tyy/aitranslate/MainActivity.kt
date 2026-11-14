@@ -464,12 +464,15 @@ class MainActivity : AppCompatActivity() {
         }
         if (Prefs.profiles(this).isEmpty()) return
         when {
-            photoUri != null && !hasTranslation -> {
+            // 翻译进行中（loading 转圈）不重发：切后台再回来时
+            // hasTranslation 仍是 false，不加进度判断会被误判成「失败待重试」而重复请求
+            photoUri != null && !hasTranslation && progress.visibility != View.VISIBLE -> {
                 handler.removeCallbacks(translateRunnable)
                 handler.postDelayed({ translatePhoto() }, 300)
             }
             // 键盘仍然可见时不自动翻译，避免从后台回来时覆盖用户正在编辑的内容
-            inputText.text.isNotBlank() && !hasTranslation && !keyboardVisible -> {
+            inputText.text.isNotBlank() && !hasTranslation && !keyboardVisible &&
+                progress.visibility != View.VISIBLE -> {
                 handler.removeCallbacks(translateRunnable)
                 handler.postDelayed(translateRunnable, 300)
             }
@@ -1216,7 +1219,7 @@ class MainActivity : AppCompatActivity() {
         // 保证「翻译中」/译文开头可见、输入尾部（含光标行）占上 3/4；
         // 输入较短（分隔线本来就在屏内）时公式自动归零不滚，输入不会被顶出去。
         // 3/4 位置若深过「收起后的滚动上限」就提前底部补白撑大上限，
-        // 收起键盘零回弹、内容保持原位。
+        // 收起键盘时按固定 1/3 定位重新滚动，补白保证合法滚动位置不回弹。
         if (keyboardVisible) {
             contentScroll.post {
                 val viewportHeight = contentScroll.height
@@ -1352,9 +1355,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.14"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.15"
         } catch (_: Exception) {
-            "2.3.14"
+            "2.3.15"
         }
     }
 
