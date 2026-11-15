@@ -98,6 +98,8 @@ class MainActivity : AppCompatActivity() {
     private var restoring = false
     private var hasTranslation = false
     private var pendingPhotoUri: Uri? = null
+    // 拍照兜底是否已重试过（防"捞到坏图→再兜底"死循环）
+    private var cameraRecoverTried = false
     private var photoUri: Uri? = null
     private var photoBase64: String? = null
     private var lastViewportHeight = 0
@@ -140,14 +142,10 @@ class MainActivity : AppCompatActivity() {
             } else {
                 // 相机既没确认成功也没往指定条目写：很多相机拍完把照片
                 // 存进了自己的默认相册位置（DCIM 等）。
-                // 捞系统相册最近一分钟内新增的照片，找到就当拍照成功用。
-                val latest = latestCameraShot()
-                if (latest != null) {
-                    processPickedImage(latest, fallback = true, tempSource = false)
-                } else {
-                    runCatching { contentResolver.delete(uri, null, null) }
-                    toast(getString(R.string.photo_not_saved))
-                }
+                // MediaStore 索引是异步扫描的，回调瞬间往往还查不到，
+                // 删掉空条目后延迟两秒再捞系统相册（给扫描留时间）。
+                runCatching { contentResolver.delete(uri, null, null) }
+                recoverCameraShot()
             }
         }
 
@@ -174,6 +172,27 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }.getOrNull()
+
+    /**
+     * 拍照链路兜底：相机没往指定条目写时，延迟两秒去系统相册捞最近的新照片
+     * （相机多半把照片存进了自己的默认位置，MediaStore 扫描是异步的，
+     * 拍照返回瞬间查不到，稍等才有）。只重试一次，防止"捞到坏图再兜底"循环。
+     */
+    private fun recoverCameraShot() {
+        val canRetry = !cameraRecoverTried
+        cameraRecoverTried = true
+        handler.postDelayed({
+            if (isFinishing || isDestroyed) return@postDelayed
+            val latest = latestCameraShot()
+            if (latest != null) {
+                processPickedImage(latest, fallback = canRetry, tempSource = false)
+            } else {
+                clearPhotoState()
+                showIdle()
+                toast(getString(R.string.photo_not_saved))
+            }
+        }, 2000L)
+    }
 
     private val galleryLauncher =
         registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -224,9 +243,9 @@ class MainActivity : AppCompatActivity() {
                             showPhoto(source)
                             translatePhoto()
                         } else {
-                            clearPhotoState()
-                            showIdle()
-                            toast(getString(R.string.photo_not_saved))
+                            // 拍照：指定条目是空的（0 字节），相机多半把照片
+                            // 存进了自己的默认相册位置，去那里兜底捞
+                            recoverCameraShot()
                         }
                     }
                     else -> {
@@ -1197,6 +1216,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         pendingPhotoUri = uri
+        cameraRecoverTried = false
 
         val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
             putExtra(MediaStore.EXTRA_OUTPUT, uri)
@@ -1470,9 +1490,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.20"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.21"
         } catch (_: Exception) {
-            "2.3.20"
+            "2.3.21"
         }
     }
 
