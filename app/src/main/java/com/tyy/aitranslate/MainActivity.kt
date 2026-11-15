@@ -3,7 +3,6 @@ package com.tyy.aitranslate
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -58,7 +57,6 @@ class MainActivity : AppCompatActivity() {
         const val CLIPBOARD_BANNER_MS = 6000L
         const val STATE_PENDING_PHOTO = "state_pending_photo"
         // 拍照后从系统相册捞「最近刚拍的照片」的时间窗口
-        const val SHOT_WINDOW_MS = 60_000L
     }
 
     private lateinit var drawerLayout: DrawerLayout
@@ -98,8 +96,6 @@ class MainActivity : AppCompatActivity() {
     private var restoring = false
     private var hasTranslation = false
     private var pendingPhotoUri: Uri? = null
-    // 拍照兜底是否已重试过（防"捞到坏图→再兜底"死循环）
-    private var cameraRecoverTried = false
     private var photoUri: Uri? = null
     private var photoBase64: String? = null
     private var lastViewportHeight = 0
@@ -140,59 +136,14 @@ class MainActivity : AppCompatActivity() {
             if (result.resultCode == RESULT_OK || written) {
                 processPickedImage(uri, fallback = true, tempSource = true)
             } else {
-                // 相机既没确认成功也没往指定条目写：很多相机拍完把照片
-                // 存进了自己的默认相册位置（DCIM 等）。
-                // MediaStore 索引是异步扫描的，回调瞬间往往还查不到，
-                // 删掉空条目后延迟两秒再捞系统相册（给扫描留时间）。
+                // 相机既没确认成功也没往指定条目写。不捞系统相册：
+                // 本 App 没有 READ_MEDIA_IMAGES 权限，query MediaStore 只能看到
+                // 自己贡献的条目，相机拍的（owner=相机）永远查不到，
+                // 捞了也是白等。直接提示从相册手选（相册选图走系统 UI，无需权限）。
                 runCatching { contentResolver.delete(uri, null, null) }
-                recoverCameraShot()
-            }
-        }
-
-    /**
-     * 系统相册里最近 [SHOT_WINDOW_MS] 内新增的照片（相机没写指定条目时的兜底）。
-     * 必须 SIZE > 0：我们自己插入的相机临时条目（0 字节）也在时间窗口内，
-     * 不过滤会被捞回来当成拍照结果，界面出现灰白块 + 翻译失败。
-     */
-    private fun latestCameraShot(): Uri? = runCatching {
-        val minAdded = (System.currentTimeMillis() - SHOT_WINDOW_MS) / 1000L
-        contentResolver.query(
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            arrayOf(MediaStore.Images.Media._ID),
-            "${MediaStore.Images.Media.DATE_ADDED} >= ? AND ${MediaStore.Images.Media.SIZE} > 0",
-            arrayOf(minAdded.toString()),
-            "${MediaStore.Images.Media.DATE_ADDED} DESC"
-        )?.use { c ->
-            if (c.moveToFirst()) {
-                ContentUris.withAppendedId(
-                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI, c.getLong(0)
-                )
-            } else {
-                null
-            }
-        }
-    }.getOrNull()
-
-    /**
-     * 拍照链路兜底：相机没往指定条目写时，延迟两秒去系统相册捞最近的新照片
-     * （相机多半把照片存进了自己的默认位置，MediaStore 扫描是异步的，
-     * 拍照返回瞬间查不到，稍等才有）。只重试一次，防止"捞到坏图再兜底"循环。
-     */
-    private fun recoverCameraShot() {
-        val canRetry = !cameraRecoverTried
-        cameraRecoverTried = true
-        handler.postDelayed({
-            if (isFinishing || isDestroyed) return@postDelayed
-            val latest = latestCameraShot()
-            if (latest != null) {
-                processPickedImage(latest, fallback = canRetry, tempSource = false)
-            } else {
-                clearPhotoState()
-                showIdle()
                 toast(getString(R.string.photo_not_saved))
             }
-        }, 2000L)
-    }
+        }
 
     private val galleryLauncher =
         registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -243,9 +194,9 @@ class MainActivity : AppCompatActivity() {
                             showPhoto(source)
                             translatePhoto()
                         } else {
-                            // 拍照：指定条目是空的（0 字节），相机多半把照片
-                            // 存进了自己的默认相册位置，去那里兜底捞
-                            recoverCameraShot()
+                            // 拍照条目是空的（0 字节）且读不出内容：
+                            // 直接提示从相册手选，界面保留拍照前的原状态
+                            toast(getString(R.string.photo_not_saved))
                         }
                     }
                     else -> {
@@ -1186,9 +1137,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun takePhoto() {
-        // Android 10+ 走系统相册的临时条目：这是相机 App 兼容性最好的写入方式
-        // （部分设备的相机在系统/相机更新后不往 App 私有目录写照片，导致拍照后"没有照片"）；
-        // IS_PENDING=1 的条目相册里不可见，转码进私有 cache 后即删，不留垃圾。
+        // Android 10+ 往系统相册插一个普通条目（owner 是本 App），交给相机写：
+        // 不用 IS_PENDING=1——pending 条目有所有者限制（Android 12 起
+        // requireOwnershipForItem 对非 owner 拒绝访问），相机写"别的 App 建的
+        // pending 条目"很可能被 MediaProvider 拒绝，导致照片永远写不进来。
+        // 普通条目 + 显式 URI grant（READ+WRITE flags + clipData，见下方 intent）
+        // 是相机支持最广泛的传统模式；写完本 App 作为 owner 直接读，转码后删条目。
         // Android 10 以下维持 App 私有 cache（MediaStore 插入需要写存储权限，不值得为它申请）。
         val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val values = ContentValues().apply {
@@ -1196,7 +1150,6 @@ class MainActivity : AppCompatActivity() {
                     "aitranslate_${System.currentTimeMillis()}.jpg")
                 put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
                 put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
-                put(MediaStore.Images.Media.IS_PENDING, 1)
             }
             runCatching {
                 contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
@@ -1216,7 +1169,6 @@ class MainActivity : AppCompatActivity() {
             return
         }
         pendingPhotoUri = uri
-        cameraRecoverTried = false
 
         val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
             putExtra(MediaStore.EXTRA_OUTPUT, uri)
@@ -1490,9 +1442,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.21"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.22"
         } catch (_: Exception) {
-            "2.3.21"
+            "2.3.22"
         }
     }
 
