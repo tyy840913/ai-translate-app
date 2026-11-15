@@ -130,7 +130,7 @@ class MainActivity : AppCompatActivity() {
             // 用户真取消时条目无内容，顺手清掉不累积
             val written = runCatching {
                 contentResolver.openAssetFileDescriptor(uri, "r")
-                    ?.use { fd -> fd.statSize > 0 } ?: false
+                    ?.use { fd -> fd.length > 0 } ?: false
             }.getOrDefault(false)
             if (result.resultCode == RESULT_OK || written) {
                 processPickedImage(uri, fallback = true, tempSource = true)
@@ -181,7 +181,7 @@ class MainActivity : AppCompatActivity() {
                         // 部分相机不往指定位置写（系统/相机更新后常见），
                         // 空容器 + 翻译报"文件不存在"只会让人困惑
                         val readable = runCatching {
-                            contentResolver.openInputStream(source)?.close() ?: false
+                            contentResolver.openInputStream(source)?.use { true } ?: false
                         }.getOrDefault(false)
                         if (readable) {
                             showPhoto(source)
