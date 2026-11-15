@@ -193,7 +193,7 @@ object TranslateClient {
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "AITranslate/2.3.18 (Android)")
+                setRequestProperty("User-Agent", "AITranslate/2.3.19 (Android)")
                 if (profile.apiKey.isNotBlank()) {
                     setRequestProperty("Authorization", "Bearer ${profile.apiKey.trim()}")
                 }
@@ -242,6 +242,78 @@ object TranslateClient {
             }
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    /**
+     * 拉取平台的模型列表（OpenAI 兼容 GET /models）。
+     * 返回排序去重后的模型 id 列表；失败时带 HTTP 状态和接口错误信息。
+     */
+    fun listModels(baseUrl: String, apiKey: String): Result<List<String>> {
+        return try {
+            if (baseUrl.isBlank()) {
+                return Result.failure(IOException("请先填写接口地址"))
+            }
+            val connection = (URL(modelsEndpoint(baseUrl)).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = CONNECT_TIMEOUT
+                readTimeout = 30_000
+                setRequestProperty("Accept", "application/json")
+                setRequestProperty("User-Agent", "AITranslate/2.3.19 (Android)")
+                if (apiKey.isNotBlank()) {
+                    setRequestProperty("Authorization", "Bearer ${apiKey.trim()}")
+                }
+            }
+            val code = connection.responseCode
+            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+            val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            connection.disconnect()
+            if (code !in 200..299) {
+                val message = try {
+                    JSONObject(body).optJSONObject("error")?.optString("message")
+                } catch (_: Exception) {
+                    null
+                }
+                val detail = if (message.isNullOrBlank()) body.take(300) else message
+                return Result.failure(
+                    IOException("HTTP $code" + if (detail.isBlank()) "" else "：$detail")
+                )
+            }
+            val data = try {
+                JSONObject(body).optJSONArray("data")
+            } catch (_: Exception) {
+                null
+            }
+            val models = data?.let { arr ->
+                (0 until arr.length()).mapNotNull { i ->
+                    arr.optJSONObject(i)?.optString("id")?.takeIf { it.isNotBlank() }
+                }
+            }.orEmpty()
+            Result.success(models.distinct().sorted())
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** 模型列表地址：与 endpoint() 的拼接规则对称（补协议/去尾斜杠/按 path 判断加 /v1）。 */
+    private fun modelsEndpoint(baseUrl: String): String {
+        var value = baseUrl.trim()
+        if (!value.startsWith("http://") && !value.startsWith("https://")) {
+            value = "https://$value"
+        }
+        value = value.trimEnd('/')
+        if (value.endsWith("/chat/completions")) {
+            return value.removeSuffix("/chat/completions") + "/models"
+        }
+        val path = try {
+            URI(value).path.orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
+        return if (path.isBlank() || path == "/") {
+            "$value/v1/models"
+        } else {
+            "$value/models"
         }
     }
 

@@ -78,6 +78,10 @@
     <string name="dialog_profile_hint">请求地址会自动补全为 Base URL + /chat/completions；Key 仅保存在本机。</string>
     <string name="please_enter_url">请输入接口地址</string>
     <string name="please_enter_model">请输入模型名称</string>
+    <string name="fetch_models">获取模型列表</string>
+    <string name="models_title">选择模型</string>
+    <string name="models_empty">接口未返回任何模型</string>
+    <string name="fetch_models_failed">获取模型失败：%1$s</string>
     <string name="default_profile_name">OpenAI</string>
     <string name="active_badge">使用中</string>
     <string name="switched_to">已切换到「%1$s」</string>

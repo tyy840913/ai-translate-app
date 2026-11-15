@@ -5,6 +5,7 @@ import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.textfield.TextInputEditText
@@ -93,6 +94,47 @@ class SettingsActivity : AppCompatActivity() {
             urlInput.setText(it.baseUrl)
             keyInput.setText(it.apiKey)
             modelInput.setText(it.model)
+        }
+
+        // 获取平台模型列表：用当前填写的接口地址和密钥（可能是编辑中未保存的值），
+        // 拉取成功后弹单选列表，选中即填入模型输入框；手动输入仍然保留。
+        view.findViewById<MaterialButton>(R.id.btn_fetch_models).setOnClickListener {
+            var url = urlInput.text?.toString()?.trim().orEmpty()
+            if (url.isEmpty()) {
+                urlLayout.error = getString(R.string.please_enter_url)
+                return@setOnClickListener
+            }
+            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                url = "https://$url"
+            }
+            val key = keyInput.text?.toString()?.trim().orEmpty()
+            val button = it
+            button.isEnabled = false
+            Thread {
+                val result = TranslateClient.listModels(url, key)
+                runOnUiThread {
+                    button.isEnabled = true
+                    val models = result.getOrNull()
+                    val error = result.exceptionOrNull()
+                    when {
+                        models != null && models.isNotEmpty() -> {
+                            MaterialAlertDialogBuilder(this)
+                                .setTitle(R.string.models_title)
+                                .setItems(models.toTypedArray()) { _, which ->
+                                    modelInput.setText(models[which])
+                                }
+                                .setNegativeButton(R.string.cancel, null)
+                                .show()
+                        }
+                        models != null -> {
+                            toast(getString(R.string.models_empty))
+                        }
+                        else -> {
+                            toast(getString(R.string.fetch_models_failed, error?.message ?: ""))
+                        }
+                    }
+                }
+            }.start()
         }
 
         val dialog = MaterialAlertDialogBuilder(this)
