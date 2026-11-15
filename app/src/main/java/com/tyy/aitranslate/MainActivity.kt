@@ -3,6 +3,7 @@ package com.tyy.aitranslate
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -56,6 +57,8 @@ class MainActivity : AppCompatActivity() {
         const val AUTO_DELAY_MS = 300L
         const val CLIPBOARD_BANNER_MS = 6000L
         const val STATE_PENDING_PHOTO = "state_pending_photo"
+        // 拍照后从系统相册捞「最近刚拍的照片」的时间窗口
+        const val SHOT_WINDOW_MS = 60_000L
     }
 
     private lateinit var drawerLayout: DrawerLayout
@@ -135,9 +138,38 @@ class MainActivity : AppCompatActivity() {
             if (result.resultCode == RESULT_OK || written) {
                 processPickedImage(uri, fallback = true, tempSource = true)
             } else {
-                runCatching { contentResolver.delete(uri, null, null) }
+                // 相机既没确认成功也没往指定条目写：很多相机拍完把照片
+                // 存进了自己的默认相册位置（DCIM 等）。
+                // 捞系统相册最近一分钟内新增的照片，找到就当拍照成功用。
+                val latest = latestCameraShot()
+                if (latest != null) {
+                    processPickedImage(latest, fallback = true, tempSource = false)
+                } else {
+                    runCatching { contentResolver.delete(uri, null, null) }
+                    toast(getString(R.string.photo_not_saved))
+                }
             }
         }
+
+    /** 系统相册里最近 [SHOT_WINDOW_MS] 内新增的照片（相机没写指定条目时的兜底）。 */
+    private fun latestCameraShot(): Uri? = runCatching {
+        val minAdded = (System.currentTimeMillis() - SHOT_WINDOW_MS) / 1000L
+        contentResolver.query(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            arrayOf(MediaStore.Images.Media._ID),
+            "${MediaStore.Images.Media.DATE_ADDED} >= ?",
+            arrayOf(minAdded.toString()),
+            "${MediaStore.Images.Media.DATE_ADDED} DESC"
+        )?.use { c ->
+            if (c.moveToFirst()) {
+                ContentUris.withAppendedId(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI, c.getLong(0)
+                )
+            } else {
+                null
+            }
+        }
+    }.getOrNull()
 
     private val galleryLauncher =
         registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -190,7 +222,13 @@ class MainActivity : AppCompatActivity() {
                             toast(getString(R.string.photo_not_saved))
                         }
                     }
-                    else -> toast(getString(R.string.photo_read_failed))
+                    else -> {
+                        // 带上具体原因（文件不存在/权限/解码失败），远程定位不再来回猜
+                        val reason = runCatching {
+                            contentResolver.openInputStream(source)?.close() ?: "empty"
+                        }.exceptionOrNull()?.message ?: "decode failed"
+                        toast(getString(R.string.photo_read_failed) + " ($reason)")
+                    }
                 }
             }
         }
@@ -1417,9 +1455,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.17"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.18"
         } catch (_: Exception) {
-            "2.3.17"
+            "2.3.18"
         }
     }
 
