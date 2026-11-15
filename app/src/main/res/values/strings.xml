@@ -110,6 +110,7 @@
     <string name="prompt_image_title">图片翻译提示词</string>
     <string name="prompt_summary_default">使用内置默认提示词</string>
     <string name="prompt_summary_custom">已自定义，点击编辑</string>
+    <string name="filter_summary_default">使用内置默认规则</string>
     <string name="prompt_hint">使用 {{TARGET}} 表示目标语言，运行时替换成实际语言名称；删除占位符会自动在开头补一行目标语言。编辑后完全以你的提示词为准，内置提示词不再发送。</string>
     <string name="prompt_reset">恢复默认</string>
     <string name="prompt_reset_message">确定恢复内置默认提示词吗？当前修改将丢失。</string>
@@ -133,6 +134,6 @@
     <string name="search_history">搜索历史记录</string>
     <string name="history_deleted">已删除该条历史</string>
     <string name="undo">撤销</string>
-    <string name="prompt_settings">翻译提示词</string>
-    <string name="prompt_settings_info">不修改时使用内置默认提示词，点击任意一项可编辑或恢复默认。</string>
+    <string name="prompt_settings">自定义规则</string>
+    <string name="prompt_settings_info">不修改时使用内置默认，点击任意一项可编辑或恢复默认。</string>
 </resources>
