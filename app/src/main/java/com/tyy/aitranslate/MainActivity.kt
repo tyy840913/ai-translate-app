@@ -56,7 +56,6 @@ class MainActivity : AppCompatActivity() {
         const val AUTO_DELAY_MS = 300L
         const val CLIPBOARD_BANNER_MS = 6000L
         const val STATE_PENDING_PHOTO = "state_pending_photo"
-        // 拍照后从系统相册捞「最近刚拍的照片」的时间窗口
     }
 
     private lateinit var drawerLayout: DrawerLayout
@@ -164,11 +163,8 @@ class MainActivity : AppCompatActivity() {
                 File(File(cacheDir, "images"), "photo_${System.currentTimeMillis()}.jpg")
             val ok = PhotoUtils.processToFile(this, source, processed)
             if (!ok) processed.delete()
-            // 拍照用的系统临时条目使命完成即删：转码成功删成功，转码失败也删，
-            // 否则 0 字节条目留在系统相册堆积（也不会再被兜底捞回来）
-            if (tempSource) {
-                runCatching { contentResolver.delete(source, null, null) }
-            }
+            // 拍照的临时条目按结果在下方各分支里处理，不能在这里提前删：
+            // 转码失败的回退路径要读的就是这个条目，先删回退必死路
             handler.post {
                 if (isFinishing || isDestroyed) return@post
                 val target = if (ok) {
@@ -180,6 +176,10 @@ class MainActivity : AppCompatActivity() {
                 }
                 when {
                     target != null -> {
+                        // 转码成功：临时条目使命完成即删（Q+ 删系统相册条目/Q- 删 cache 文件）
+                        if (tempSource) {
+                            runCatching { contentResolver.delete(source, null, null) }
+                        }
                         showPhoto(target)
                         translatePhoto()
                     }
@@ -191,11 +191,17 @@ class MainActivity : AppCompatActivity() {
                                 ?.use { it.read() != -1 } ?: false
                         }.getOrDefault(false)
                         if (readable) {
+                            // 条目此刻就是用户照片本体，删了照片就没了，不删：
+                            // Q+ 留在系统相册 Pictures（用户可从相册找到），
+                            // Q- 留在 cache，由 cleanupOldPhotos 换图时统一清理
                             showPhoto(source)
                             translatePhoto()
                         } else {
-                            // 拍照条目是空的（0 字节）且读不出内容：
+                            // 拍照条目是空的（0 字节）且读不出内容：清掉空条目，
                             // 直接提示从相册手选，界面保留拍照前的原状态
+                            if (tempSource) {
+                                runCatching { contentResolver.delete(source, null, null) }
+                            }
                             toast(getString(R.string.photo_not_saved))
                         }
                     }
@@ -271,7 +277,11 @@ class MainActivity : AppCompatActivity() {
                 }
             updateTargetViews()
 
-            if (output.isBlank()) showIdle() else showResult(output, restoredTarget)
+            if (output.isBlank()) showIdle() else showResult(
+                output,
+                if (targetLang == Languages.SMART) getString(R.string.smart_target)
+                else targetLang
+            )
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -459,7 +469,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.btn_history).setOnClickListener { openHistory() }
         findViewById<View>(R.id.btn_remove_photo).setOnClickListener { clearAll() }
         btnClear.setOnClickListener { clearAll() }
-        findViewById<View>(R.id.api_banner).setOnClickListener {
+        apiBanner.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
 
@@ -1442,9 +1452,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.22"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.23"
         } catch (_: Exception) {
-            "2.3.22"
+            "2.3.23"
         }
     }
 
