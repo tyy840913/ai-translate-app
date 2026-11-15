@@ -631,7 +631,7 @@ class MainActivity : AppCompatActivity() {
     private fun worthPrompting(text: String): Boolean {
         // 保底规则：规则文本全被清空/改坏时，纯数字符号也不至于弹提示
         if (text.none { it.isLetter() }) return false
-        val rules = Prefs.promptFilter(this)
+        val rules = Prefs.promptFilter(this).ifBlank { Prompts.DEFAULT_FILTER }
         for (line in rules.lineSequence()) {
             val pattern = line.trim()
             if (pattern.isEmpty() || pattern.startsWith("#")) continue
@@ -1510,9 +1510,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.35"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.36"
         } catch (_: Exception) {
-            "2.3.35"
+            "2.3.36"
         }
     }
 
