@@ -154,8 +154,8 @@ class MainActivity : AppCompatActivity() {
      * 拍照/相册统一入口：解码 → EXIF 校正 → 缩到最长边 1600px → JPEG 85% 转码落盘，
      * 再走 FileProvider。相册几十 MB 的原图/HEIC 也只写几百 KB，避免超长复制与 cache 膨胀。
      * 相册 URI 的读权限只限当次，转码进 cache 后切换目标语言重译仍可读。
-     * 拍照路径转码失败时回退用相机直出文件（相机已写好，可正常读）；
-     * 相册失败只能提示重选。
+     * 拍照路径转码失败时回退用相机直出文件（相机已写好）：先读进内存再删条目，
+     * 系统相册不留翻译用的照片；相册失败只能提示重选。
      */
     private fun processPickedImage(source: Uri, fallback: Boolean, tempSource: Boolean = false) {
         executor.execute {
@@ -191,11 +191,29 @@ class MainActivity : AppCompatActivity() {
                                 ?.use { it.read() != -1 } ?: false
                         }.getOrDefault(false)
                         if (readable) {
-                            // 条目此刻就是用户照片本体，删了照片就没了，不删：
-                            // Q+ 留在系统相册 Pictures（用户可从相册找到），
-                            // Q- 留在 cache，由 cleanupOldPhotos 换图时统一清理
-                            showPhoto(source)
-                            translatePhoto()
+                            // 转码落盘失败改用直出图：先把照片读进内存（后台），
+                            // 成功后才删相册条目——翻译用的是内存里的 base64，
+                            // 之后重译也走缓存不再读条目，保证系统相册不留
+                            // 翻译用的照片；读取失败则恢复文本态提示。
+                            executor.execute {
+                                val prepared = runCatching { PhotoUtils.prepare(this, source) }
+                                handler.post {
+                                    if (isFinishing || isDestroyed) return@post
+                                    val data = prepared.getOrNull()
+                                    if (data == null) {
+                                        clearPhotoState()
+                                        showIdle()
+                                        toast(
+                                            getString(R.string.photo_read_failed) +
+                                                " (${prepared.exceptionOrNull()?.message ?: "decode failed"})"
+                                        )
+                                        return@post
+                                    }
+                                    runCatching { contentResolver.delete(source, null, null) }
+                                    showPhotoWith(source, data)
+                                    translatePhoto()
+                                }
+                            }
                         } else {
                             // 拍照条目是空的（0 字节）且读不出内容：清掉空条目，
                             // 直接提示从相册手选，界面保留拍照前的原状态
@@ -1089,11 +1107,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showPhoto(uri: Uri) {
-        photoUri = uri
         photoBase64 = null
+        photoPreview.setImageDrawable(null)
+        showPhotoCommon(uri)
+    }
+
+    /** 回退直出图的展示：照片已读进内存（base64 已缓存），条目删掉后重译也走缓存。 */
+    private fun showPhotoWith(uri: Uri, data: PhotoUtils.PreparedPhoto) {
+        photoBase64 = data.base64
+        photoPreview.setImageBitmap(data.preview)
+        showPhotoCommon(uri)
+    }
+
+    private fun showPhotoCommon(uri: Uri) {
+        photoUri = uri
         photoContainer.visibility = View.VISIBLE
         inputText.visibility = View.GONE
-        photoPreview.setImageDrawable(null)
         restoring = true
         inputText.setText("")
         restoring = false
@@ -1452,9 +1481,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.23"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.24"
         } catch (_: Exception) {
-            "2.3.23"
+            "2.3.24"
         }
     }
 
