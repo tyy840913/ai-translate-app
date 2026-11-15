@@ -151,13 +151,17 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-    /** 系统相册里最近 [SHOT_WINDOW_MS] 内新增的照片（相机没写指定条目时的兜底）。 */
+    /**
+     * 系统相册里最近 [SHOT_WINDOW_MS] 内新增的照片（相机没写指定条目时的兜底）。
+     * 必须 SIZE > 0：我们自己插入的相机临时条目（0 字节）也在时间窗口内，
+     * 不过滤会被捞回来当成拍照结果，界面出现灰白块 + 翻译失败。
+     */
     private fun latestCameraShot(): Uri? = runCatching {
         val minAdded = (System.currentTimeMillis() - SHOT_WINDOW_MS) / 1000L
         contentResolver.query(
             MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
             arrayOf(MediaStore.Images.Media._ID),
-            "${MediaStore.Images.Media.DATE_ADDED} >= ?",
+            "${MediaStore.Images.Media.DATE_ADDED} >= ? AND ${MediaStore.Images.Media.SIZE} > 0",
             arrayOf(minAdded.toString()),
             "${MediaStore.Images.Media.DATE_ADDED} DESC"
         )?.use { c ->
@@ -190,8 +194,9 @@ class MainActivity : AppCompatActivity() {
                 File(File(cacheDir, "images"), "photo_${System.currentTimeMillis()}.jpg")
             val ok = PhotoUtils.processToFile(this, source, processed)
             if (!ok) processed.delete()
-            // 转码已落地到私有 cache：拍照用的系统临时条目使命完成，删掉不留相册垃圾
-            if (ok && tempSource) {
+            // 拍照用的系统临时条目使命完成即删：转码成功删成功，转码失败也删，
+            // 否则 0 字节条目留在系统相册堆积（也不会再被兜底捞回来）
+            if (tempSource) {
                 runCatching { contentResolver.delete(source, null, null) }
             }
             handler.post {
@@ -209,24 +214,29 @@ class MainActivity : AppCompatActivity() {
                         translatePhoto()
                     }
                     fallback -> {
-                        // 回退直出文件前先确认相机真的写出了可读的照片：
-                        // 部分相机不往指定位置写（系统/相机更新后常见），
-                        // 空容器 + 翻译报"文件不存在"只会让人困惑
+                        // 回退直出文件前先确认真能读出内容：0 字节条目 openInputStream
+                        // 也会成功，必须读出首字节才算数，否则界面只剩灰白块 + 翻译失败
                         val readable = runCatching {
-                            contentResolver.openInputStream(source)?.use { true } ?: false
+                            contentResolver.openInputStream(source)
+                                ?.use { it.read() != -1 } ?: false
                         }.getOrDefault(false)
                         if (readable) {
                             showPhoto(source)
                             translatePhoto()
                         } else {
+                            clearPhotoState()
+                            showIdle()
                             toast(getString(R.string.photo_not_saved))
                         }
                     }
                     else -> {
-                        // 带上具体原因（文件不存在/权限/解码失败），远程定位不再来回猜
+                        // 带上具体原因（文件不存在/权限/解码失败），远程定位不再来回猜；
+                        // 同时把界面恢复成干净的文本态，不能让上次的灰白块残局误导
                         val reason = runCatching {
                             contentResolver.openInputStream(source)?.close() ?: "empty"
                         }.exceptionOrNull()?.message ?: "decode failed"
+                        clearPhotoState()
+                        showIdle()
                         toast(getString(R.string.photo_read_failed) + " ($reason)")
                     }
                 }
@@ -1113,17 +1123,22 @@ class MainActivity : AppCompatActivity() {
         cleanupOldPhotos(uri)
     }
 
-    /** 删除 cache/images 下除当前图片外的历史 photo_*.jpg。 */
+    /**
+     * 删除 cache/images 下除当前图片外的历史 photo_*.jpg。
+     * keep 是 FileProvider uri（content://authority/images/photo_x.jpg），
+     * lastPathSegment 只是文件名，直接和 cache/images 下的文件名比对即可；
+     * 之前误用 File(cacheDir, 文件名)（cache 根）比对永不命中，
+     * 刚转码的当前图也会被删，靠并发竞态侥幸不出错（ENOENT 的来源）。
+     */
     private fun cleanupOldPhotos(keep: Uri) {
-        val keepPath = keep.lastPathSegment ?: return
+        val keepName = keep.lastPathSegment ?: return
         executor.execute {
             val dir = File(cacheDir, "images")
             val files = dir.listFiles { f ->
                 f.name.startsWith("photo_") && f.name.endsWith(".jpg")
             } ?: return@execute
-            val keepFile = File(cacheDir, keepPath)
             for (f in files) {
-                if (f.absolutePath != keepFile.absolutePath) f.delete()
+                if (f.name != keepName) f.delete()
             }
         }
     }
@@ -1455,9 +1470,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.19"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.20"
         } catch (_: Exception) {
-            "2.3.19"
+            "2.3.20"
         }
     }
 
