@@ -12,6 +12,9 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.os.Handler
 import android.os.Looper
+import android.content.ContentValues
+import android.os.Build
+import android.os.Environment
 import android.provider.MediaStore
 import android.provider.Settings
 import android.text.Editable
@@ -122,14 +125,17 @@ class MainActivity : AppCompatActivity() {
                 }
                 return@registerForActivityResult
             }
-            // 相机说成功、或文件已有内容（部分第三方相机返回"取消"码但照片已写好）都处理；
-            // 用户真取消时 takePhoto 预建的是空文件，自然跳过，顺手删掉不累积
-            val shotFile = uri.lastPathSegment?.let { File(cacheDir, it) }
-            val written = shotFile != null && shotFile.length() > 0
+            // 用 resolver 探测照片是否真的写出来了（对 MediaStore 条目和文件都成立）。
+            // 相机说成功、或照片已有内容（部分第三方相机返回"取消"码但照片已写好）都处理；
+            // 用户真取消时条目无内容，顺手清掉不累积
+            val written = runCatching {
+                contentResolver.openAssetFileDescriptor(uri, "r")
+                    ?.use { fd -> fd.statSize > 0 } ?: false
+            }.getOrDefault(false)
             if (result.resultCode == RESULT_OK || written) {
-                processPickedImage(uri, fallback = true)
+                processPickedImage(uri, fallback = true, tempSource = true)
             } else {
-                shotFile?.delete()
+                runCatching { contentResolver.delete(uri, null, null) }
             }
         }
 
@@ -146,12 +152,16 @@ class MainActivity : AppCompatActivity() {
      * 拍照路径转码失败时回退用相机直出文件（相机已写好，可正常读）；
      * 相册失败只能提示重选。
      */
-    private fun processPickedImage(source: Uri, fallback: Boolean) {
+    private fun processPickedImage(source: Uri, fallback: Boolean, tempSource: Boolean = false) {
         executor.execute {
             val processed =
                 File(File(cacheDir, "images"), "photo_${System.currentTimeMillis()}.jpg")
             val ok = PhotoUtils.processToFile(this, source, processed)
             if (!ok) processed.delete()
+            // 转码已落地到私有 cache：拍照用的系统临时条目使命完成，删掉不留相册垃圾
+            if (ok && tempSource) {
+                runCatching { contentResolver.delete(source, null, null) }
+            }
             handler.post {
                 if (isFinishing || isDestroyed) return@post
                 val target = if (ok) {
@@ -167,8 +177,18 @@ class MainActivity : AppCompatActivity() {
                         translatePhoto()
                     }
                     fallback -> {
-                        showPhoto(source)
-                        translatePhoto()
+                        // 回退直出文件前先确认相机真的写出了可读的照片：
+                        // 部分相机不往指定位置写（系统/相机更新后常见），
+                        // 空容器 + 翻译报"文件不存在"只会让人困惑
+                        val readable = runCatching {
+                            contentResolver.openInputStream(source)?.close() ?: false
+                        }.getOrDefault(false)
+                        if (readable) {
+                            showPhoto(source)
+                            translatePhoto()
+                        } else {
+                            toast(getString(R.string.photo_not_saved))
+                        }
                     }
                     else -> toast(getString(R.string.photo_read_failed))
                 }
@@ -1094,15 +1114,32 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun takePhoto() {
-        val dir = File(cacheDir, "images")
-        if (!dir.exists() && !dir.mkdirs()) {
-            toast(getString(R.string.photo_read_failed))
-            return
+        // Android 10+ 走系统相册的临时条目：这是相机 App 兼容性最好的写入方式
+        // （部分设备的相机在系统/相机更新后不往 App 私有目录写照片，导致拍照后"没有照片"）；
+        // IS_PENDING=1 的条目相册里不可见，转码进私有 cache 后即删，不留垃圾。
+        // Android 10 以下维持 App 私有 cache（MediaStore 插入需要写存储权限，不值得为它申请）。
+        val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME,
+                    "aitranslate_${System.currentTimeMillis()}.jpg")
+                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+            runCatching {
+                contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+            }.getOrNull()
+        } else {
+            val dir = File(cacheDir, "images")
+            if (!dir.exists() && !dir.mkdirs()) null
+            else {
+                val file = File(dir, "photo_${System.currentTimeMillis()}.jpg")
+                runCatching {
+                    FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+                }.getOrNull()
+            }
         }
-        val file = File(dir, "photo_${System.currentTimeMillis()}.jpg")
-        val uri = try {
-            FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
-        } catch (_: Exception) {
+        if (uri == null) {
             toast(getString(R.string.photo_read_failed))
             return
         }
@@ -1380,9 +1417,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.16"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.17"
         } catch (_: Exception) {
-            "2.3.16"
+            "2.3.17"
         }
     }
 
