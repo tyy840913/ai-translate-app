@@ -52,6 +52,10 @@ class PromptActivity : AppCompatActivity() {
             else -> Prefs.promptText(this)
         }
         input.setHint(if (isFilter) R.string.filter_hint else R.string.prompt_hint)
+        // 编辑框上方的说明文字也要按模式分流（布局里写死 prompt_hint，这里覆盖）
+        findViewById<TextView>(R.id.prompt_hint_text).text = getString(
+            if (isFilter) R.string.filter_hint else R.string.prompt_hint
+        )
         input.setText(if (saved.isBlank()) defaultPrompt else saved)
         input.setSelection(input.text.length)
 
