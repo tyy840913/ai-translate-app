@@ -84,8 +84,12 @@ class FullscreenActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // 图片预览的大 bitmap 不再需要，释放引用避免常驻内存
-        FullscreenContent.image = null
+        // 图片预览的大 bitmap 不再需要，释放引用避免常驻内存。
+        // 旋转等配置变更会销毁重建本页（isFinishing=false），此时保留
+        // bitmap 供新实例继续显示，只有真正退出才释放。
+        if (isFinishing) {
+            FullscreenContent.image = null
+        }
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
