@@ -971,7 +971,20 @@ class MainActivity : AppCompatActivity() {
         showLoading(requestTarget)
 
         executor.execute {
-            val result = TranslateClient.translate(profile, text, requestTarget, prompt)
+            val result = TranslateClient.translate(profile, text, requestTarget, prompt) { delta ->
+                // 流式增量上屏：首个片段到达即撤掉「翻译中」，后续直接追加；
+                // seq 不符说明发起了新请求，旧流片段全部丢弃避免交叉显示
+                handler.post {
+                    if (seq != requestSeq || isFinishing || isDestroyed) return@post
+                    if (progress.visibility == View.VISIBLE) {
+                        progress.visibility = View.GONE
+                        outputText.text = ""
+                        outputText.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
+                        scrollToResult()
+                    }
+                    outputText.append(delta)
+                }
+            }
             handler.post {
                 if (seq != requestSeq || isFinishing || isDestroyed) return@post
                 val translated = result.getOrNull()
@@ -1497,9 +1510,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.30"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.31"
         } catch (_: Exception) {
-            "2.3.30"
+            "2.3.31"
         }
     }
 

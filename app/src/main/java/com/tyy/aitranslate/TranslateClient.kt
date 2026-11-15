@@ -20,13 +20,23 @@ object TranslateClient {
         profile: ApiProfile,
         text: String,
         target: String,
-        promptTemplate: String = Prompts.DEFAULT_TEXT
+        promptTemplate: String = Prompts.DEFAULT_TEXT,
+        onDelta: ((String) -> Unit)? = null
     ): Result<String> {
         val targetName = Languages.promptName(target)
-        val first = request(
-            profile,
-            textMessages(text, target, targetName, promptTemplate, strict = false)
-        )
+        val messages = textMessages(text, target, targetName, promptTemplate, strict = false)
+        if (onDelta != null) {
+            // 优先流式：边生成边上屏减少长文等待；失败/为空/明显未翻译时
+            // 静默回退到下方完整非流式路径，已上屏的片段会被终态结果覆盖
+            val streamed = executeStream(profile, messages, onDelta)
+            val streamedText = streamed.getOrNull()
+            if (!streamedText.isNullOrBlank() &&
+                !Languages.looksUntranslated(streamedText, target)
+            ) {
+                return Result.success(streamedText)
+            }
+        }
+        val first = request(profile, messages)
         val translated = first.getOrNull() ?: return first
         // 兜底：明显没翻译（如目标中文却全是英文）时，用更强的提示重试一次
         if (!Languages.looksUntranslated(translated, target)) return first
@@ -193,7 +203,7 @@ object TranslateClient {
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "AITranslate/2.3.30 (Android)")
+                setRequestProperty("User-Agent", "AITranslate/2.3.31 (Android)")
                 if (profile.apiKey.isNotBlank()) {
                     setRequestProperty("Authorization", "Bearer ${profile.apiKey.trim()}")
                 }
@@ -209,16 +219,7 @@ object TranslateClient {
             connection.disconnect()
 
             if (code !in 200..299) {
-                val message = try {
-                    JSONObject(body).optJSONObject("error")?.optString("message")
-                } catch (_: Exception) {
-                    null
-                }
-                val detail = if (message.isNullOrBlank()) {
-                    body.take(300)
-                } else {
-                    message
-                }
+                val detail = errorDetail(body)
                 return Result.failure(
                     IOException("HTTP $code" + if (detail.isBlank()) "" else "：$detail")
                 )
@@ -245,6 +246,104 @@ object TranslateClient {
         }
     }
 
+    /** 错误响应体里的可读信息：error.message 优先，否则截前 300 字。 */
+    private fun errorDetail(body: String): String {
+        return try {
+            JSONObject(body).optJSONObject("error")?.optString("message")
+        } catch (_: Exception) {
+            null
+        }.orEmpty().ifBlank { body.take(300) }
+    }
+
+    /**
+     * 流式请求：SSE 逐行读增量片段并回调 onDelta（在调用线程上执行），
+     * 返回 clean 后的完整文本。任何失败/空结果返回 failure，
+     * 由调用方静默回退到非流式路径。
+     */
+    private fun executeStream(
+        profile: ApiProfile,
+        messages: JSONArray,
+        onDelta: (String) -> Unit
+    ): Result<String> {
+        return try {
+            if (profile.baseUrl.isBlank()) {
+                return Result.failure(IOException("请先在设置中填写接口地址"))
+            }
+            if (profile.model.isBlank()) {
+                return Result.failure(IOException("请先在设置中填写模型名称"))
+            }
+
+            val payload = JSONObject().apply {
+                put("model", profile.model.trim())
+                put("stream", true)
+                put("temperature", 0.1)
+                // 关思考三系字段照发（同 execute 的 extras 分支）；
+                // 不认这些字段的平台报 400 时流式失败，自动回退非流式链
+                put("thinking", JSONObject().put("type", "disabled"))
+                put("reasoning_effort", "none")
+                put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
+                put("messages", messages)
+            }
+
+            val connection = (URL(endpoint(profile.baseUrl)).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = CONNECT_TIMEOUT
+                readTimeout = READ_TIMEOUT
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                setRequestProperty("Accept", "text/event-stream")
+                setRequestProperty("User-Agent", "AITranslate/2.3.31 (Android)")
+                if (profile.apiKey.isNotBlank()) {
+                    setRequestProperty("Authorization", "Bearer ${profile.apiKey.trim()}")
+                }
+            }
+
+            connection.outputStream.use {
+                it.write(payload.toString().toByteArray(Charsets.UTF_8))
+            }
+
+            val code = connection.responseCode
+            if (code !in 200..299) {
+                val body = connection.errorStream?.bufferedReader(Charsets.UTF_8)
+                    ?.use { it.readText() }.orEmpty()
+                connection.disconnect()
+                val detail = errorDetail(body)
+                throw IOException("HTTP $code" + if (detail.isBlank()) "" else "：$detail")
+            }
+
+            // SSE：每行 "data: {...}"，[DONE] 结束。只取 choices[0].delta.content；
+            // 思考类增量（reasoning_content 等独立字段）天然跳过不会上屏。
+            val full = StringBuilder()
+            connection.inputStream.bufferedReader(Charsets.UTF_8).useLines { lines ->
+                for (line in lines) {
+                    if (!line.startsWith("data:")) continue
+                    val data = line.removePrefix("data:").trim()
+                    if (data == "[DONE]") break
+                    val delta = try {
+                        JSONObject(data).optJSONArray("choices")?.optJSONObject(0)
+                            ?.optJSONObject("delta")?.optString("content")
+                    } catch (_: Exception) {
+                        null
+                    }.orEmpty()
+                    if (delta.isNotEmpty()) {
+                        full.append(delta)
+                        onDelta(delta)
+                    }
+                }
+            }
+            connection.disconnect()
+
+            val cleaned = clean(full.toString())
+            if (cleaned.isBlank()) {
+                Result.failure(IOException("模型返回内容为空，请重试或检查自定义提示词"))
+            } else {
+                Result.success(cleaned)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     /**
      * 拉取平台的模型列表（OpenAI 兼容 GET /models）。
      * 返回排序去重后的模型 id 列表；失败时带 HTTP 状态和接口错误信息。
@@ -259,7 +358,7 @@ object TranslateClient {
                 connectTimeout = CONNECT_TIMEOUT
                 readTimeout = 30_000
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "AITranslate/2.3.30 (Android)")
+                setRequestProperty("User-Agent", "AITranslate/2.3.31 (Android)")
                 if (apiKey.isNotBlank()) {
                     setRequestProperty("Authorization", "Bearer ${apiKey.trim()}")
                 }
