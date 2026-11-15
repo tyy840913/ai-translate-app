@@ -4,11 +4,14 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.MotionEvent
+import android.view.View
 import android.view.ScaleGestureDetector
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -25,13 +28,39 @@ class FullscreenActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (FullscreenContent.text.isBlank()) {
+        val image = FullscreenContent.image
+        if (image == null && FullscreenContent.text.isBlank()) {
             finish()
             return
         }
         setContentView(R.layout.activity_fullscreen)
 
         findViewById<ImageButton>(R.id.btn_back).setOnClickListener { finish() }
+
+        if (image != null) {
+            // 图片预览模式：只看图 + 双指缩放，复制/分享/语言行不适用，全部隐藏
+            findViewById<View>(R.id.btn_copy).visibility = View.GONE
+            findViewById<View>(R.id.btn_share).visibility = View.GONE
+            findViewById<View>(R.id.fullscreen_lang).visibility = View.GONE
+            findViewById<View>(R.id.fullscreen_text).visibility = View.GONE
+            val fullscreenImage = findViewById<ImageView>(R.id.fullscreen_image)
+            fullscreenImage.visibility = View.VISIBLE
+            fullscreenImage.setImageBitmap(image)
+            scaleDetector = ScaleGestureDetector(
+                this,
+                object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                    override fun onScale(detector: ScaleGestureDetector): Boolean {
+                        // 双指缩放整图，夹在 0.5x~3x 防止极端值
+                        textScale = (textScale * detector.scaleFactor).coerceIn(0.5f, 3f)
+                        fullscreenImage.scaleX = textScale
+                        fullscreenImage.scaleY = textScale
+                        return true
+                    }
+                }
+            )
+            return
+        }
+
         findViewById<ImageButton>(R.id.btn_copy).setOnClickListener { copyTranslation() }
         findViewById<ImageButton>(R.id.btn_share).setOnClickListener { shareTranslation() }
 
@@ -51,6 +80,12 @@ class FullscreenActivity : AppCompatActivity() {
                 }
             }
         )
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // 图片预览的大 bitmap 不再需要，释放引用避免常驻内存
+        FullscreenContent.image = null
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
@@ -79,4 +114,6 @@ class FullscreenActivity : AppCompatActivity() {
 object FullscreenContent {
     var text: String = ""
     var target: String = ""
+    /** 图片全屏预览模式：非空时全屏页显示图片而不是译文 */
+    var image: Bitmap? = null
 }

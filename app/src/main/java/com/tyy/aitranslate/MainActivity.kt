@@ -5,6 +5,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.media.AudioManager
@@ -44,6 +46,7 @@ import androidx.core.widget.NestedScrollView
 import androidx.drawerlayout.widget.DrawerLayout
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import java.io.File
@@ -495,6 +498,7 @@ class MainActivity : AppCompatActivity() {
         btnCopy.setOnClickListener { copyTranslation() }
         btnShare.setOnClickListener { shareTranslation() }
         btnFullscreen.setOnClickListener { openFullscreen() }
+        photoPreview.setOnClickListener { openPhotoFullscreen() }
         btnSpeak.setOnClickListener { speakTranslation() }
         btnRetry.setOnClickListener {
             if (photoUri != null) translatePhoto() else translateNow(false)
@@ -1160,18 +1164,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun choosePhotoSource() {
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.photo_source_title)
-            .setItems(
-                arrayOf(
-                    getString(R.string.photo_from_camera),
-                    getString(R.string.photo_from_gallery)
-                )
-            ) { _, which ->
-                if (which == 0) takePhoto() else galleryLauncher.launch("image/*")
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        // 拍照还是相册二选一：拍照要把结果写进 MediaStore 临时条目，
+        // 相册只拿读权限，路径不同所以先让用户选。
+        // 底部弹层样式：大图标大行高，点击区域清晰不易误触；
+        // 点弹层外部或下滑即可取消，不再放取消按钮
+        val sheet = BottomSheetDialog(this)
+        sheet.setContentView(R.layout.sheet_photo_source)
+        sheet.findViewById<View>(R.id.option_camera)?.setOnClickListener {
+            sheet.dismiss()
+            takePhoto()
+        }
+        sheet.findViewById<View>(R.id.option_gallery)?.setOnClickListener {
+            sheet.dismiss()
+            galleryLauncher.launch("image/*")
+        }
+        sheet.show()
     }
 
     private fun takePhoto() {
@@ -1323,7 +1330,17 @@ class MainActivity : AppCompatActivity() {
         btnSpeak.alpha = if (enabled) 1f else 0.35f
     }
 
+    private fun openPhotoFullscreen() {
+        // 预览图点开放大到全屏查看（双指缩放与译文全屏一致）
+        val bitmap = (photoPreview.drawable as? BitmapDrawable)?.bitmap ?: return
+        FullscreenContent.text = ""
+        FullscreenContent.target = ""
+        FullscreenContent.image = bitmap
+        startActivity(Intent(this, FullscreenActivity::class.java))
+    }
+
     private fun openFullscreen() {
+        FullscreenContent.image = null
         if (!hasTranslation) {
             toast(getString(R.string.no_translation_yet))
             return
@@ -1480,9 +1497,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.25"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.26"
         } catch (_: Exception) {
-            "2.3.25"
+            "2.3.26"
         }
     }
 

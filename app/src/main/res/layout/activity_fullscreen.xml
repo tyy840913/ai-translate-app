@@ -48,6 +48,15 @@
             android:tint="@color/text_secondary" />
     </LinearLayout>
 
+    <ImageView
+        android:id="@+id/fullscreen_image"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:contentDescription="@string/photo_source_title"
+        android:scaleType="fitCenter"
+        android:visibility="gone" />
+
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
