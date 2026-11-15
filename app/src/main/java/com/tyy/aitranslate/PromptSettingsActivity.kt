@@ -7,7 +7,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 
 /**
- * 自定义规则入口页：文本翻译、图片翻译两套提示词与剪贴板过滤规则分开编辑。
+ * 翻译提示词入口页：文本翻译、图片翻译两套提示词分开编辑。
  */
 class PromptSettingsActivity : AppCompatActivity() {
 
@@ -18,7 +18,6 @@ class PromptSettingsActivity : AppCompatActivity() {
         findViewById<View>(R.id.btn_back).setOnClickListener { finish() }
         findViewById<View>(R.id.row_prompt_text).setOnClickListener { openPrompt(image = false) }
         findViewById<View>(R.id.row_prompt_image).setOnClickListener { openPrompt(image = true) }
-        findViewById<View>(R.id.row_prompt_filter).setOnClickListener { openFilter() }
     }
 
     override fun onResume() {
@@ -43,14 +42,6 @@ class PromptSettingsActivity : AppCompatActivity() {
                     R.string.prompt_summary_custom
                 }
             )
-        findViewById<TextView>(R.id.setting_prompt_filter_summary).text =
-            getString(
-                if (Prefs.promptFilter(this).isBlank()) {
-                    R.string.filter_summary_default
-                } else {
-                    R.string.prompt_summary_custom
-                }
-            )
     }
 
     private fun openPrompt(image: Boolean) {
@@ -60,10 +51,4 @@ class PromptSettingsActivity : AppCompatActivity() {
         )
     }
 
-    private fun openFilter() {
-        startActivity(
-            Intent(this, PromptActivity::class.java)
-                .putExtra(PromptActivity.EXTRA_FILTER, true)
-        )
-    }
 }

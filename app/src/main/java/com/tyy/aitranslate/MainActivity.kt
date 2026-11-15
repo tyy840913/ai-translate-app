@@ -513,6 +513,13 @@ class MainActivity : AppCompatActivity() {
             drawerLayout.closeDrawer(GravityCompat.START)
             startActivity(Intent(this, PromptSettingsActivity::class.java))
         }
+        findViewById<View>(R.id.nav_filter).setOnClickListener {
+            drawerLayout.closeDrawer(GravityCompat.START)
+            startActivity(
+                Intent(this, PromptActivity::class.java)
+                    .putExtra(PromptActivity.EXTRA_FILTER, true)
+            )
+        }
         findViewById<View>(R.id.nav_history).setOnClickListener {
             drawerLayout.closeDrawer(GravityCompat.START)
             openHistory()
@@ -1510,9 +1517,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.36"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.37"
         } catch (_: Exception) {
-            "2.3.36"
+            "2.3.37"
         }
     }
 

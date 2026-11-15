@@ -104,7 +104,6 @@
 
     <string name="prompt_text_title">文本翻译提示词</string>
     <string name="filter_rules_title">剪贴板过滤规则</string>
-    <string name="filter_summary_default">使用内置默认规则</string>
     <string name="filter_hint">每行一条正则，命中任意一条的剪贴板内容不弹翻译提示；空行和 # 开头的行是注释；全部清空则使用内置默认规则。</string>
     <string name="filter_reset_message">确定恢复内置默认过滤规则吗？当前修改将丢失。</string>
     <string name="filter_saved">过滤规则已保存</string>
@@ -134,6 +133,6 @@
     <string name="search_history">搜索历史记录</string>
     <string name="history_deleted">已删除该条历史</string>
     <string name="undo">撤销</string>
-    <string name="prompt_settings">自定义规则</string>
-    <string name="prompt_settings_info">翻译提示词与剪贴板过滤规则都在这里。不修改时使用内置默认，点击任意一项可编辑或恢复默认。</string>
+    <string name="prompt_settings">翻译提示词</string>
+    <string name="prompt_settings_info">不修改时使用内置默认提示词，点击任意一项可编辑或恢复默认。</string>
 </resources>
