@@ -1510,9 +1510,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.33"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.34"
         } catch (_: Exception) {
-            "2.3.33"
+            "2.3.34"
         }
     }
 
