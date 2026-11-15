@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- 接近 Google 翻译的蓝底，做识别度；纯色更干净 -->
-    <solid android:color="#4285F4" />
-</shape>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 对角分割：左上蓝（文），右下白（A），斜线从右上角到左下角 -->
+    <path
+        android:fillColor="#4285F4"
+        android:pathData="M0,0 L108,0 L0,108 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M108,0 L108,108 L0,108 Z" />
+</vector>

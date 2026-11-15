@@ -193,7 +193,7 @@ object TranslateClient {
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "AITranslate/2.3.28 (Android)")
+                setRequestProperty("User-Agent", "AITranslate/2.3.29 (Android)")
                 if (profile.apiKey.isNotBlank()) {
                     setRequestProperty("Authorization", "Bearer ${profile.apiKey.trim()}")
                 }
@@ -259,7 +259,7 @@ object TranslateClient {
                 connectTimeout = CONNECT_TIMEOUT
                 readTimeout = 30_000
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "AITranslate/2.3.28 (Android)")
+                setRequestProperty("User-Agent", "AITranslate/2.3.29 (Android)")
                 if (apiKey.isNotBlank()) {
                     setRequestProperty("Authorization", "Bearer ${apiKey.trim()}")
                 }
