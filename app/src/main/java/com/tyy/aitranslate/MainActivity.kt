@@ -485,7 +485,6 @@ class MainActivity : AppCompatActivity() {
             drawerLayout.openDrawer(GravityCompat.START)
         }
         findViewById<View>(R.id.btn_history).setOnClickListener { openHistory() }
-        findViewById<View>(R.id.btn_remove_photo).setOnClickListener { clearAll() }
         btnClear.setOnClickListener { clearAll() }
         apiBanner.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
@@ -1481,9 +1480,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.24"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.25"
         } catch (_: Exception) {
-            "2.3.24"
+            "2.3.25"
         }
     }
 

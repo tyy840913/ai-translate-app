@@ -21,7 +21,6 @@
     <string name="pick_target_language">选择目标语言</string>
     <string name="translate">翻译</string>
     <string name="photo_translate">拍照翻译</string>
-    <string name="remove_photo">移除图片</string>
     <string name="photo_read_failed">无法读取图片</string>
     <string name="photo_not_saved">相机没有保存照片，请重拍或改从相册选择</string>
     <string name="camera_unavailable">没有可用的相机应用</string>
