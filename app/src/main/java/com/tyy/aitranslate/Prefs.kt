@@ -14,6 +14,7 @@ object Prefs {
     private const val KEY_CUSTOM_TARGETS = "custom_targets"
     private const val KEY_PROMPT_TEXT = "prompt_text"
     private const val KEY_PROMPT_IMAGE = "prompt_image"
+    private const val KEY_FILTER_RULES = "filter_rules"
     private const val MAX_HISTORY = 100
 
     private fun prefs(context: Context) =
@@ -275,6 +276,21 @@ object Prefs {
     }
 
     /** 与内置默认一致或为空时存空串，表示「使用默认」。 */
+    /** 用户自定义剪贴板过滤规则；空串表示用内置默认（与提示词同一套约定）。 */
+    fun promptFilter(context: Context): String {
+        val saved = normalizePrompt(
+            prefs(context).getString(KEY_FILTER_RULES, "") ?: "",
+            Prompts.DEFAULT_FILTER
+        )
+        return if (saved.isBlank()) Prompts.DEFAULT_FILTER else saved
+    }
+
+    fun setPromptFilter(context: Context, value: String) {
+        prefs(context).edit()
+            .putString(KEY_FILTER_RULES, normalizePrompt(value, Prompts.DEFAULT_FILTER))
+            .apply()
+    }
+
     private fun normalizePrompt(value: String, default: String): String {
         val body = value.trim()
         return if (body.isEmpty() || body == default.trim()) "" else value

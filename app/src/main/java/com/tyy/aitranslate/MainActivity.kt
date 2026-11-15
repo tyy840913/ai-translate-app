@@ -623,21 +623,21 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * 剪贴板内容值得提示翻译吗：
-     * - 没有任何字母/汉字（纯数字、号码、金额、符号、标点）→ 不提示；
-     * - 整段就是一个 URL / 域名 / 邮箱 → 不提示；
+     * - 保底：没有任何字母/汉字（纯数字、号码、金额、符号、标点）→ 不提示；
+     * - 其余由「自定义规则」页的过滤规则决定：每行一条正则，
+     *   命中任意一条 → 不提示；空行和 # 开头的行是注释。
      * - 混合文本里的 URL 不误伤（含其他可译内容，翻译时 URL 本来就保持原样）。
      */
     private fun worthPrompting(text: String): Boolean {
+        // 保底规则：规则文本全被清空/改坏时，纯数字符号也不至于弹提示
         if (text.none { it.isLetter() }) return false
-        if (text.startsWith("http://", true) ||
-            text.startsWith("https://", true) ||
-            text.startsWith("www.", true)
-        ) return false
-        if (!text.contains(' ') && (
-                text.matches(Regex("[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+")) ||
-                    text.matches(Regex("[\\w-]+(\\.[\\w-]+)+(/[^\\s]*)?"))
-            )
-        ) return false
+        val rules = Prefs.promptFilter(this)
+        for (line in rules.lineSequence()) {
+            val pattern = line.trim()
+            if (pattern.isEmpty() || pattern.startsWith("#")) continue
+            val regex = runCatching { Regex(pattern) }.getOrNull() ?: continue
+            if (regex.containsMatchIn(text)) return false
+        }
         return true
     }
 
@@ -1510,9 +1510,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.31"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.32"
         } catch (_: Exception) {
-            "2.3.31"
+            "2.3.32"
         }
     }
 
