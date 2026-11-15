@@ -52,6 +52,7 @@ class MainActivity : AppCompatActivity() {
     private companion object {
         const val AUTO_DELAY_MS = 300L
         const val CLIPBOARD_BANNER_MS = 6000L
+        const val STATE_PENDING_PHOTO = "state_pending_photo"
     }
 
     private lateinit var drawerLayout: DrawerLayout
@@ -113,8 +114,22 @@ class MainActivity : AppCompatActivity() {
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             val uri = pendingPhotoUri
             pendingPhotoUri = null
-            if (result.resultCode == RESULT_OK && uri != null) {
+            if (uri == null) {
+                // 理论不该发生（STATE_PENDING_PHOTO 已兜住进程重建）：
+                // 相机说成功但位置确实丢了，至少给反馈，不再无声无息
+                if (result.resultCode == RESULT_OK) {
+                    toast(getString(R.string.photo_read_failed))
+                }
+                return@registerForActivityResult
+            }
+            // 相机说成功、或文件已有内容（部分第三方相机返回"取消"码但照片已写好）都处理；
+            // 用户真取消时 takePhoto 预建的是空文件，自然跳过，顺手删掉不累积
+            val shotFile = uri.lastPathSegment?.let { File(cacheDir, it) }
+            val written = shotFile != null && shotFile.length() > 0
+            if (result.resultCode == RESULT_OK || written) {
                 processPickedImage(uri, fallback = true)
+            } else {
+                shotFile?.delete()
             }
         }
 
@@ -223,6 +238,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 拍照期间进程被系统杀掉重建时，从保存状态找回拍照输出位置，
+        // 否则相机回来回调拿不到位置会静默丢照片
+        savedInstanceState?.getString(STATE_PENDING_PHOTO)?.let {
+            pendingPhotoUri = Uri.parse(it)
+        }
         setContentView(R.layout.activity_main)
 
         drawerLayout = findViewById(R.id.drawer_layout)
@@ -450,6 +470,11 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         })
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        pendingPhotoUri?.let { outState.putString(STATE_PENDING_PHOTO, it.toString()) }
     }
 
     override fun onResume() {
@@ -1355,9 +1380,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun appVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.15"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "2.3.16"
         } catch (_: Exception) {
-            "2.3.15"
+            "2.3.16"
         }
     }
 
